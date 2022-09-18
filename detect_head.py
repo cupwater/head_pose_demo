@@ -2,7 +2,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:17:57
-LastEditTime: 2022-09-18 11:16:29
+LastEditTime: 2022-09-18 23:33:45
 Description: 
 
 '''
@@ -58,16 +58,19 @@ def detect_head(ori_image, ort_session):
     confidences, boxes = ort_session.run(None, {input_name: image})
     boxes, labels, probs = predict((w,h), confidences, boxes, prob_threshold=0.6)
 
-    # # visualize the detecting results
-    # for i in range(boxes.shape[0]):
-    #     box = boxes[i, :]
-    #     cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)
-    # ori_image = cv2.resize(ori_image, (0, 0), fx=0.7, fy=0.7)
-    # cv2.imshow('annotated', ori_image)
-    # if cv2.waitKey(-1) & 0xFF == ord('q'):
-    #     exit(0)
+    if len(boxes) == 0:
+        return None
+    # get the max area head and return
+    max_area, max_idx = -1, -1
+    for i in range(boxes.shape[0]):
+        box = boxes[i, :]
+        cur_area = abs((box[2] - box[0]) * (box[3] - box[1])) 
+        if max_area < cur_area:
+            max_area = cur_area
+            max_idx = i
+    return boxes[max_idx]
 
-    return boxes, labels, probs
+
 
 if __name__ == '__main__':
     img_path = "data/test.jpg"
@@ -75,4 +78,11 @@ if __name__ == '__main__':
 
     onnx_path = "weights/lite_head_detection.onnx"
     ort_session = ort.InferenceSession(onnx_path)
-    boxes, _, _ = detect_head(image, ort_session)
+    box = detect_head(image, ort_session)
+
+    # visualize the detecting results
+    cv2.rectangle(image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)
+    image = cv2.resize(image, (0, 0), fx=0.7, fy=0.7)
+    cv2.imshow('annotated', image)
+    if cv2.waitKey(-1) & 0xFF == ord('q'):
+        exit(0)
