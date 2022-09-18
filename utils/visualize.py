@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:15:06
-LastEditTime: 2022-09-18 10:26:28
+LastEditTime: 2022-09-18 11:02:43
 Description: 
 
 '''
@@ -19,7 +19,6 @@ def get_landmarks_from_heatmap(pred_heatmap, img_size = [384, 288]):
     y_idxs = np.repeat(y_idxs, w, axis=1)
     landmarks = []
 
-    pdb.set_trace()
     for i in range(pred_heatmap.shape[-1]):
         x_pos = int(np.sum(pred_heatmap[:,:,i] * x_idxs) / np.sum(pred_heatmap[:,:,i]))
         y_pos = int(np.sum(pred_heatmap[:,:,i] * y_idxs) / np.sum(pred_heatmap[:,:,i]))

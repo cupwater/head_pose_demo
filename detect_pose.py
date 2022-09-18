@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-16 21:43:34
-LastEditTime: 2022-09-18 10:22:28
+LastEditTime: 2022-09-18 11:16:33
 Description: 
 
 '''
@@ -12,11 +12,12 @@ import onnxruntime as ort
 
 from utils.visualize import get_landmarks_from_heatmap, visualize_heatmap
 
-def detect_pose(img_path, onnx_path):
-    ort_session = ort.InferenceSession(onnx_path)
-    input_name = ort_session.get_inputs()[0].name
-    ori_image = cv2.imread(img_path)
+def detect_pose(ori_image, ort_session):
+    # ort_session = ort.InferenceSession(onnx_path)
+    # ori_image = cv2.imread(img_path)
     
+    input_name = ort_session.get_inputs()[0].name
+
     def _preprocess(ori_image):
         # pre-process the input image 
         image = cv2.cvtColor(ori_image, cv2.COLOR_BGR2RGB)
@@ -35,12 +36,18 @@ def detect_pose(img_path, onnx_path):
     print("inference time:{}".format(time.time() - start_time))
 
     landmarks = get_landmarks_from_heatmap(output)
-    img = visualize_heatmap(image, landmarks)
-    cv2.imshow('img', img)
-    if cv2.waitKey(-1) & 0xFF == ord('q'):
-        exit(0)
+    # img = visualize_heatmap(image, landmarks)
+    
+    return landmarks
+    # cv2.imshow('img', img)
+    # if cv2.waitKey(-1) & 0xFF == ord('q'):
+    #     exit(0)
 
 if __name__ == '__main__':
     img_path = "data/test.jpg"
+    image = cv2.imread(img_path)
+
     onnx_path = "weights/lite_hrnet_30_coco.onnx"
-    detect_pose(img_path, onnx_path)
+    ort_session = ort.InferenceSession(onnx_path)
+    
+    detect_pose(image, ort_session)
