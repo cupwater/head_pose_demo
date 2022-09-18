@@ -1,15 +1,13 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:15:06
-LastEditTime: 2022-09-18 23:27:36
+LastEditTime: 2022-09-19 01:13:39
 Description: 
 
 '''
-import cv2
 import numpy as np
-import pdb
 
-def get_landmarks_from_heatmap(pred_heatmap, ori_size):
+def get_landmarks_from_heatmap(pred_heatmap, src_size, tgt_size=(384,288)):
     pred_heatmap = np.transpose(pred_heatmap, [1,2,0])
     h,w,_ = pred_heatmap.shape
     ## get the position of landmarks
@@ -24,8 +22,14 @@ def get_landmarks_from_heatmap(pred_heatmap, ori_size):
         y_pos = int(np.sum(pred_heatmap[:,:,i] * y_idxs) / np.sum(pred_heatmap[:,:,i]))
         landmarks.append([x_pos, y_pos])
     landmarks = np.array(landmarks)
-    landmarks[:,0] = landmarks[:,0]/w * ori_size[1]
-    landmarks[:,1] = landmarks[:,1]/h * ori_size[0]
+    
+    if 1.0*src_size[0]/tgt_size[0] > 1.0*src_size[1]/tgt_size[1]:
+        landmarks[:,0] = landmarks[:,0]/w * tgt_size[1] * src_size[0] / tgt_size[0]
+        landmarks[:,1] = landmarks[:,1]/h * src_size[0]
+    else:
+        landmarks[:,0] = landmarks[:,0]/w * src_size[1]
+        landmarks[:,1] = landmarks[:,1]/h * tgt_size[0] * src_size[1] / tgt_size[1]
+
     landmarks = landmarks.astype(np.int32)
     return landmarks
 

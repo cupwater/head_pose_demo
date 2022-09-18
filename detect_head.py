@@ -2,7 +2,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:17:57
-LastEditTime: 2022-09-18 23:33:45
+LastEditTime: 2022-09-19 01:10:54
 Description: 
 
 '''
@@ -69,7 +69,6 @@ def detect_head(ori_image, ort_session):
             max_area = cur_area
             max_idx = i
     return boxes[max_idx]
-
 
 
 if __name__ == '__main__':

@@ -1,12 +1,10 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 11:23:32
-LastEditTime: 2022-09-18 21:59:30
+LastEditTime: 2022-09-18 23:39:10
 Description: 
 
 '''
-import numpy as np
-import pdb
 
 def head2body_box(img, head_box):
     # Todo
