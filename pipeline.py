@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-09-19 01:14:34
+LastEditTime: 2022-09-25 10:56:25
 Description: 
 
 '''
@@ -24,7 +24,6 @@ def demo(video_path, pose_onnx_path, head_onnx_path):
     cap = cv2.VideoCapture(video_path)
     while True:
         _, ori_image = cap.read()
-        # ori_image = cv2.imread('data/test.jpg')
         if ori_image is None:
             break
         box = detect_head(ori_image, head_ort_session)
@@ -48,6 +47,6 @@ def demo(video_path, pose_onnx_path, head_onnx_path):
 
 if __name__ == '__main__':
     video_path = "data/demo.mp4"
-    head_onnx_path = "weights/lite_head_detection.onnx"
-    pose_onnx_path = "weights/lite_hrnet_30_coco.onnx"
+    head_onnx_path = "weights/lite_head_detection_simplied.onnx"
+    pose_onnx_path = "weights/lite_hrnet_30_coco_simplied.onnx"
     demo(video_path, pose_onnx_path, head_onnx_path)

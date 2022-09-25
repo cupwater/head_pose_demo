@@ -2,7 +2,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:17:57
-LastEditTime: 2022-09-19 01:10:54
+LastEditTime: 2022-09-25 10:56:04
 Description: 
 
 '''
@@ -41,14 +41,14 @@ def predict(imgsize, confidences, boxes, prob_threshold=0.6, iou_threshold=0.3, 
     return picked_box_probs[:, :4].astype(np.int32), np.array(picked_labels), picked_box_probs[:, 4]
 
 
-def detect_head(ori_image, ort_session):
+def detect_head(ori_image, ort_session, input_size=(320, 240)):
     h, w, _ = ori_image.shape
     input_name = ort_session.get_inputs()[0].name
 
     def _preprocess(ori_image):
         # pre-process the input image 
         image = cv2.cvtColor(ori_image, cv2.COLOR_BGR2RGB)
-        image = cv2.resize(image, (320, 240))
+        image = cv2.resize(image, input_size)
         image = (image - np.array([127, 127, 127])) / 128.0
         image = np.expand_dims(np.transpose(image, [2, 0, 1]), axis=0)
         image = image.astype(np.float32)
@@ -56,6 +56,10 @@ def detect_head(ori_image, ort_session):
 
     image = _preprocess(ori_image)
     confidences, boxes = ort_session.run(None, {input_name: image})
+
+    # import pdb
+    # pdb.set_trace()
+
     boxes, labels, probs = predict((w,h), confidences, boxes, prob_threshold=0.6)
 
     if len(boxes) == 0:
@@ -75,7 +79,7 @@ if __name__ == '__main__':
     img_path = "data/test.jpg"
     image = cv2.imread(img_path)
 
-    onnx_path = "weights/lite_head_detection.onnx"
+    onnx_path = "weights/lite_head_detection_simplied.onnx"
     ort_session = ort.InferenceSession(onnx_path)
     box = detect_head(image, ort_session)
 
