@@ -1,11 +1,12 @@
 '''
 Author: Peng Bo
 Date: 2022-09-16 21:43:34
-LastEditTime: 2022-09-25 14:34:27
+LastEditTime: 2022-09-25 17:13:26
 Description: 
 
 '''
 import cv2
+import pdb
 import numpy as np
 import onnxruntime as ort
 
@@ -45,7 +46,7 @@ class MyQueue:
                 self.get()
         else:
             self.head = self.tail = 0
-            self.queue[self.head] = element
+            self.queue[self.head] = element[0]
     
     def get(self):
         if self.head == -1:
@@ -77,6 +78,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
         input_size: the input size for feature extraction model.
     '''
     cap = cv2.VideoCapture(video)
+    sname = smodel.get_inputs()[0].name
+    tname = tmodel.get_inputs()[0].name
 
     # pre-process the input image 
     def _preprocess(ori_image):
@@ -87,8 +90,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
         image = image.astype(np.float32)
         return image
 
-    squeue  = MyQueue()
-    tqueue  = MyQueue()
+    squeue  = MyQueue(queue_size=frame_len)
+    tqueue  = MyQueue(queue_size=frame_len)
     inference_res = []
     frame_idx = 1
     while(True):
@@ -108,13 +111,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
                 processed_frame = _preprocess(frame)
                 # extract features and recogntiion using temporal segment network
                 rgbdiff = processed_frame - _preprocess(previous_frame)
-                # squeue.put(smodel(current_frame))
-                # tqueue.put(tmodel(rgbdiff))
-                x = np.random.rand( len(action_list) )
-                squeue.put( np.exp(x)/sum(np.exp(x)) )
-                x = np.random.rand( len(action_list) )
-                tqueue.put( np.exp(x)/sum(np.exp(x)) )
-
+                squeue.put(smodel.run(None, {sname: processed_frame})[0])
+                tqueue.put(tmodel.run(None, {tname: rgbdiff})[0])
             # Consensus the K frame as the final results
             predict  = squeue.get_average() + tqueue.get_average()
             idx = np.argmax(predict)
@@ -125,8 +123,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
     return inference_res
 
 if __name__ == '__main__':
-    spatial_ort_session  = ort.InferenceSession("weights/lite_head_detection_simplied.onnx")
-    temporal_ort_session = ort.InferenceSession("weights/lite_hrnet_30_coco_simplied.onnx")
-    fusion_ort_session   = ort.InferenceSession("weights/lite_head_detection_simplied.onnx")
+    spatial_ort_session  = ort.InferenceSession("weights/r18_smodel_simplied.onnx")
+    temporal_ort_session = ort.InferenceSession("weights/r34_tmodel_simplied.onnx")
+    # fusion_ort_session   = ort.InferenceSession("weights/lite_head_detection_simplied.onnx")
     video_path = "data/demo.mp4"
-    results = detect_action(video_path, spatial_ort_session, temporal_ort_session, fusion_ort_session)
+    results = detect_action(video_path, spatial_ort_session, temporal_ort_session)
