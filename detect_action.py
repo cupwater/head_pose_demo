@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-16 21:43:34
-LastEditTime: 2022-09-25 17:13:26
+LastEditTime: 2022-10-17 18:49:16
 Description: 
 
 '''
@@ -9,6 +9,8 @@ import cv2
 import pdb
 import numpy as np
 import onnxruntime as ort
+
+from utils.myqueue import MyQueue
 
 action_list = [
     '吃零食',
@@ -20,52 +22,6 @@ action_list = [
     '离开书桌',
     '正常'
 ]
-
-class MyQueue:
-    def __init__(self, queue_size=12, element_dim=len(action_list)):
-        self.queue_size  = queue_size
-        self.queue = np.zeros((queue_size, element_dim), dtype=np.float32)
-        self.head = -1
-        self.tail = -1
-
-    def get_average(self):
-        if self.element_num == self.queue_size:
-            return np.mean(self.queue, axis=1)
-        else:
-            if self.head >= self.tail:
-                return np.mean( self.queue[self.tail:(self.head+1)], axis=0 )
-            else:
-                temp = np.concatenate([ self.queue[self.tail:], self.queue[:self.head] ], axis=0) 
-                return np.mean(temp, axis=0)
-
-    def put(self, element):
-        if self.head != -1:
-            self.queue[(self.head+1)%self.queue_size] = element
-            self.head = (self.head+1) % self.queue_size
-            if self.head == self.tail:
-                self.get()
-        else:
-            self.head = self.tail = 0
-            self.queue[self.head] = element[0]
-    
-    def get(self):
-        if self.head == -1:
-            print("error, the queue is empty")
-            return None
-        else:
-            if self.tail == self.head:
-                self.head = self.tail = -1
-                return self.queue[0]
-            self.tail = (self.tail+1) % self.queue_size
-    
-    def element_num(self):
-        if (self.head + 1) % self.queue_size == self.tail:
-            return self.queue_size
-        elif self.head == self.tail:
-            return 1
-        else:
-            return self.head - self.tail
-
 
 def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, frame_len=12, input_size=(320, 240)):
     '''
@@ -90,8 +46,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
         image = image.astype(np.float32)
         return image
 
-    squeue  = MyQueue(queue_size=frame_len)
-    tqueue  = MyQueue(queue_size=frame_len)
+    squeue  = MyQueue(queue_size=frame_len, element_dim=len(action_list))
+    tqueue  = MyQueue(queue_size=frame_len, element_dim=len(action_list))
     inference_res = []
     frame_idx = 1
     while(True):
@@ -114,7 +70,7 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
                 squeue.put(smodel.run(None, {sname: processed_frame})[0])
                 tqueue.put(tmodel.run(None, {tname: rgbdiff})[0])
             # Consensus the K frame as the final results
-            predict  = squeue.get_average() + tqueue.get_average()
+            predict  = (squeue.get_average() + tqueue.get_average()) / 2
             idx = np.argmax(predict)
             prob = predict[idx]
             semantic_label = action_list[idx]
@@ -125,6 +81,6 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
 if __name__ == '__main__':
     spatial_ort_session  = ort.InferenceSession("weights/r18_smodel_simplied.onnx")
     temporal_ort_session = ort.InferenceSession("weights/r34_tmodel_simplied.onnx")
-    # fusion_ort_session   = ort.InferenceSession("weights/lite_head_detection_simplied.onnx")
     video_path = "data/demo.mp4"
     results = detect_action(video_path, spatial_ort_session, temporal_ort_session)
+    print(results)
