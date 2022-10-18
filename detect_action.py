@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-16 21:43:34
-LastEditTime: 2022-10-17 18:49:16
+LastEditTime: 2022-10-18 15:46:36
 Description: 
 
 '''
@@ -60,15 +60,15 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
         elif frame_idx % step == 0:
             if not dets_res is None and dets_res[frame_idx] is None:
                 x = np.ones( len(action_list) )
-                squeue.put(np.exp(x)/sum(np.exp(x)))
+                squeue.enqueue(np.exp(x)/sum(np.exp(x)))
                 x = np.ones( len(action_list) )
-                tqueue.put(np.exp(x)/sum(np.exp(x)))
+                tqueue.enqueue(np.exp(x)/sum(np.exp(x)))
             else:
                 processed_frame = _preprocess(frame)
                 # extract features and recogntiion using temporal segment network
                 rgbdiff = processed_frame - _preprocess(previous_frame)
-                squeue.put(smodel.run(None, {sname: processed_frame})[0])
-                tqueue.put(tmodel.run(None, {tname: rgbdiff})[0])
+                squeue.enqueue(smodel.run(None, {sname: processed_frame})[0])
+                tqueue.enqueue(tmodel.run(None, {tname: rgbdiff})[0])
             # Consensus the K frame as the final results
             predict  = (squeue.get_average() + tqueue.get_average()) / 2
             idx = np.argmax(predict)
