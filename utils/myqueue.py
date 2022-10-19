@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-10-17 18:47:56
-LastEditTime: 2022-10-19 09:23:17
+LastEditTime: 2022-10-19 10:12:51
 Description: 
 
 '''
@@ -12,6 +12,7 @@ class MyQueue:
     def __init__(self, queue_size=12, element_dim=1, pool_window=1):
         self.queue_size  = queue_size
         self.queue = np.zeros((queue_size, element_dim), dtype=np.float32)
+        self.pool_window = pool_window
         self.head = -1
         self.tail = -1
 
@@ -66,6 +67,6 @@ class MyQueue:
         feature = np.array(feature).reshape(-1, 2)
         feature[:, 0] = ((feature[:,0]-x_min) / (x_max-x_min) - 0.5) * 4
         feature[:, 1] = ((feature[:,1]-y_min) / (y_max-y_min) - 0.5) * 4
-        feature = np.mean(feature.reshape(-1, 2, 2), axis=1)
+        feature = np.mean(feature.reshape(-1, self.pool_window, 2), axis=1)
         feature = feature.reshape(-1).tolist()
         return feature

@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-10-19 09:32:38
+LastEditTime: 2022-10-19 10:15:25
 Description: 
 
 '''
@@ -115,10 +115,10 @@ def pipeline(video_path, pose_onnx_path, head_onnx_path, state_onnx_path):
             cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)
 
         else:
-            # no heads detected 
+            # there should be a module that processes exceptions, e.g. no head detected, 
             pose_queue.enqueue(np.zeros(num_points*2))
             state_queue.enqueue(np.array([0, 1.0], dtype=np.float32))
-        
+
         cv2.imshow('annotated', ori_image)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
