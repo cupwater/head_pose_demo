@@ -1,16 +1,18 @@
 '''
 Author: Peng Bo
 Date: 2022-10-17 18:47:56
-LastEditTime: 2022-11-14 10:39:17
+LastEditTime: 2022-11-21 20:29:33
 Description: 
 
 '''
 
 import numpy as np
+import pdb
 
 class MyQueue:
     def __init__(self, queue_size=12, element_dim=1, pool_window=1):
         self.queue_size  = queue_size
+        self.element_dim = element_dim
         self.queue = np.zeros((queue_size, element_dim), dtype=np.float32)
         self.pool_window = pool_window
         self.head = -1
@@ -57,6 +59,13 @@ class MyQueue:
         else:
             return self.head - self.tail
     
+    def smooth(self):
+        smooth_element = []
+        for i in range(self.pool_window):
+            smooth_element.append(self.queue[(self.head-i+self.queue_size)%self.queue_size].tolist())
+        smooth_element = np.mean(np.array(smooth_element).reshape(-1, self.element_dim), axis=0)
+        return smooth_element
+
     def to_feature(self):
         feature = []
         for i in range(self.queue_size):
@@ -70,7 +79,6 @@ class MyQueue:
         feature = np.mean(feature.reshape(-1, self.pool_window, 2), axis=1)
         feature = feature.reshape(-1).tolist()
         return feature
-
 
     def to_feature1(self):
         feature = []
