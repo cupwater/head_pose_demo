@@ -38,17 +38,11 @@ if __name__ == '__main__':
     onnx_path = "weights/mbnv3_320x180.onnx"
     ort_session = ort.InferenceSession(onnx_path)
     cap = cv2.VideoCapture(0)
-    img_size = (320, 180)
+    img_size = (180, 320)
     anchors, variance = gen_bbox(img_size)
-
 
     confidence_threshold = 0.6
     nms_threshold = 0.5
-
-
-    im_size_min = 180
-    target_size = 320
-    resize = float(target_size) / float(im_size_min)
 
     scale = np.array([img_size[1], img_size[0], img_size[1], img_size[0]])
     lms_scale = np.array([img_size[1], img_size[0], img_size[1], img_size[0],
@@ -56,14 +50,13 @@ if __name__ == '__main__':
                                img_size[1], img_size[0]])
     while True:
         ret, frame = cap.read()
-        frame = cv2.resize(frame, img_size)
+        frame = cv2.resize(frame, (img_size[1], img_size[0]))
         if not ret:
             break
-        loc, conf, landms = detect_face_lms(frame, ort_session, input_size=img_size)
+        loc, conf, landms = detect_face_lms(frame, ort_session, input_size=(img_size[1], img_size[0]))
         boxes = decode(loc.squeeze(0), anchors, variance)
         scores = conf.squeeze(0)[:, 1]
         landms = decode_landm(landms.squeeze(0), anchors, variance)
-        print("debug info")
         # ignore low scores
         inds = np.where(scores > confidence_threshold)[0]
         boxes = boxes[inds] * scale
@@ -83,7 +76,6 @@ if __name__ == '__main__':
         dets = dets[keep, :]
         landms = landms[keep]
         dets = np.concatenate((dets, landms), axis=1)
-        pdb.set_trace()
         for box in dets:
             if box[4] < 0.8:
                 continue

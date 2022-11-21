@@ -11,8 +11,8 @@ from itertools import product
 
 import pdb
 
-def gen_bbox(img_size=(320, 180)):
-    min_sizes_list = [[128, 256], [256, 512]]
+def gen_bbox(img_size=(180, 320)):
+    min_sizes_list = [[64, 128], [256, 512]]
     variance  = [0.1, 0.2]
     steps = [16, 32]
     feature_maps = [[ceil(img_size[0]/step), ceil(img_size[1]/step)] for step in steps]
@@ -27,7 +27,7 @@ def gen_bbox(img_size=(320, 180)):
                 for cy, cx in product(dense_cy, dense_cx):
                     anchors += [cx, cy, s_kx, s_ky]
     anchors = np.array(anchors).reshape(-1, 4)
-    return np.clip(anchors, 0, 1), variance
+    return anchors, variance
 
 def decode(loc, anchors, variances):
     """Decode locations from predictions using anchors to undo
