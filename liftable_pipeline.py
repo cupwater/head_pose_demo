@@ -93,7 +93,7 @@ def pipeline(video_path, face_lms_path, state_onnx_path):
             bbox_queue.enqueue(np.zeros(4))
             state_queue.enqueue(np.array([0, 1.0], dtype=np.float32))
         cv2.imshow('annotated', image)
-        if cv2.waitKey(-1) & 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     cap.release()
 

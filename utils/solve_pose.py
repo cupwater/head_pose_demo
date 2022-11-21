@@ -24,9 +24,10 @@ points3p_3d = np.array([
 ], dtype = np.float64)
 
 
+focal_length = 400
+
 def pose_estimate(pts_2d, pts_3d=points_3d, img_size=(180, 320), dist_coeffs=np.zeros((4, 1))):
     # focal_length = max(img_size[0], img_size[1])
-    focal_length = 320
     camera_center = (img_size[1]/2, img_size[0]/2)
     camera_matrix = np.array([
         [focal_length, 0, camera_center[0]],
@@ -52,7 +53,9 @@ def pose_estimate(pts_2d, pts_3d=points_3d, img_size=(180, 320), dist_coeffs=np.
                     flags=cv2.SOLVEPNP_ITERATIVE)
     else:
         _, rot_vec, trt_vec, _ = cv2.solvePnPRansac(pts_3d, pts_2d.astype(np.float64), 
-                    camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_EPNP)
+                    camera_matrix, dist_coeffs)
+        #_, rot_vec, trt_vec, _ = cv2.solvePnPRansac(pts_3d, pts_2d.astype(np.float64), 
+        #            camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_EPNP)
     return rot_vec, trt_vec
 
 
