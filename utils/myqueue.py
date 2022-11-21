@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-10-17 18:47:56
-LastEditTime: 2022-10-19 10:12:51
+LastEditTime: 2022-11-14 10:39:17
 Description: 
 
 '''
@@ -58,6 +58,21 @@ class MyQueue:
             return self.head - self.tail
     
     def to_feature(self):
+        feature = []
+        for i in range(self.queue_size):
+            feature += self.queue[(self.head-i-1+self.queue_size)%self.queue_size].tolist()
+
+        x_max, x_min = 757.694, -125.634
+        y_max, y_min = 753.617, -254.816
+        feature = np.array(feature).reshape(-1, 2)
+        feature[:, 0] = ((feature[:,0]-x_min) / (x_max-x_min) - 0.5) * 4
+        feature[:, 1] = ((feature[:,1]-y_min) / (y_max-y_min) - 0.5) * 4
+        feature = np.mean(feature.reshape(-1, self.pool_window, 2), axis=1)
+        feature = feature.reshape(-1).tolist()
+        return feature
+
+
+    def to_feature1(self):
         feature = []
         for i in range(self.queue_size):
             feature += self.queue[(self.head-i-1+self.queue_size)%self.queue_size].tolist()
