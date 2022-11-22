@@ -62,9 +62,15 @@ class MyQueue:
     def smooth(self):
         smooth_element = []
         for i in range(self.pool_window):
-            smooth_element.append(self.queue[(self.head-i+self.queue_size)%self.queue_size].tolist())
+            smooth_element.append(self.queue[(self.head-i+self.queue_size)%self.queue_size])
         smooth_element = np.mean(np.array(smooth_element).reshape(-1, self.element_dim), axis=0)
         return smooth_element
+
+    def lastest_k(self, k=1):
+        lastest_element = []
+        for i in range(k):
+            lastest_element.append(self.queue[(self.head-i+self.queue_size)%self.queue_size])
+        return lastest_element
 
     def to_feature(self):
         feature = []

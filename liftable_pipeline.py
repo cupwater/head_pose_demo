@@ -2,7 +2,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-21 21:16:02
+LastEditTime: 2022-11-22 10:26:31
 Description: 
 
 '''
@@ -77,7 +77,6 @@ def pipeline(video_path, face_lms_path, state_onnx_path):
             rot_vec, trt_vec = pose_estimate(lms_queue.smooth().reshape(-1, 2))
             print('-------------------------\n', rot_vec, '||||\n', trt_vec,
               '\n-------------------------\n')
-              
             # get the human state and update state queue
             feature = np.array(bbox_queue.to_feature()).astype(
                 np.float32).reshape(1, -1)

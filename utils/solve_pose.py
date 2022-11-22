@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-11-21 14:33:35
-LastEditTime: 2022-11-21 21:05:34
+LastEditTime: 2022-11-22 10:51:43
 Description: 
 
 '''
@@ -27,7 +27,7 @@ points3p_3d = np.array([
 focal_length = 400
 
 def pose_estimate(pts_2d, pts_3d=points_3d, img_size=(180, 320), dist_coeffs=np.zeros((4, 1))):
-    # focal_length = max(img_size[0], img_size[1])
+    focal_length = max(img_size[0], img_size[1])
     camera_center = (img_size[1]/2, img_size[0]/2)
     camera_matrix = np.array([
         [focal_length, 0, camera_center[0]],

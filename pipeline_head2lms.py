@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-14 18:31:55
+LastEditTime: 2022-11-22 16:59:12
 Description: 
 
 '''
@@ -14,102 +14,132 @@ import onnxruntime as ort
 from detect_head import detect_head
 from detect_facelms_v2 import detect_facelms_v2
 from utils.solve_pose import pose_estimate
+from utils.head2body_box import head2body_box1
+from utils.sift_feature import filter_sift_descriptors, get_avg_distance
+from utils.VirtualDesk import VirtualDesk
 from utils.myqueue import MyQueue
 
-states_list = ["动作", "静止"]
+import pdb
 
-class VirtualDesk:
-    def __init__(self, init_height=120, height_range=(100, 160)):
-        self.height_range  = height_range
-        self.height = init_height
-    
-    def get_height(self):
-        return self.height
-    
-    def up(self, distance):
-        if self.height+distance >= self.height_range[1]:
-            print("exceed max height, will keep max height")
-            self.height = self.height_range[1]
-        else:
-            self.height += distance
+adjust_signal = False
+last_desp, last_pts2d = None, None
+img_size = (540, 960)
+detect_interval = 10
 
-    def down(self, distance):
-        if self.height-distance <= self.height_range[0]:
-            print("exceed min height, will keep min height")
-            self.height = self.height_range[0]
-        else:
-            self.height -= distance
-    
-    def adjust(self, distance):
-        if distance<0:
-            self.down(abs(distance))
-        else:
-            self.up(abs(distance))
-        
+def _2eyes_nose_2mouth_(landmarks):
+    """ get [eyes, nose, mouth] landmarks from WLFW landmarks detection  
+    """
+    landmarks = landmarks.reshape(-1, 2)
+    left_eye = np.mean(landmarks[[60, 61, 63, 64, 65, 67], :], axis=0)
+    right_eye = np.mean(landmarks[[68, 69, 71, 72, 73, 75], :], axis=0)
+    nose = landmarks[57]
+    left_mouth = landmarks[76]
+    right_mouth = landmarks[82]
+    return np.array([left_eye, right_eye, nose, left_mouth, right_mouth])
 
-def pipeline(video_path, head_onnx_path, facelms_onnx_path, state_onnx_path):
+
+def trigger_adjust_signal(image, box):
+    """ check whether to trigger adjust signal through the camera moving, \n
+        we use the SIFT feature point detection and matching to judge the moving of camera
+    """
+    global adjust_signal, last_desp, last_pts2d
+    pts2d, desps = filter_sift_descriptors(image, head2body_box1(image, box))
+    if not last_desp is None:
+        camera_move_distance = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
+        pdb.set_trace()
+        # when move_distance over threshold xx, trigger the signal for adjust
+        if camera_move_distance > 0.1:
+            adjust_signal = True 
+    last_desp  = desps
+    last_pts2d = pts2d
+
+
+def check_adjust_signal(lms_queue, bbox_queue):
+    """check whether to reset the adjust signal according the lms and bbox queues,
+        we reset the adjust signal when it comes such situations:
+        - 1. no facebox detecting continuous ();
+        - 2. current head position match desk's height and being stable;
+    """
+    global adjust_signal
+
+    # situation 1
+    history_boxes = bbox_queue.lastest_k(k=15)
+    avg_box = np.mean(np.array(history_boxes).reshape(-1, 4), axis=0)
+    if avg_box[2] < 10 and avg_box[3] < 10:
+        adjust_signal = False
+        return
     
+    pdb.set_trace()
+
+    # situation 2
+    history_pts5p_2d = lms_queue.lastest_k(k=15)
+    rot_vec, trt_vec = pose_estimate(lms_queue.smooth().reshape(-1, 2), img_size=img_size)
+    return
+
+
+def adjust_actor(desk: VirtualDesk):
+    return
+
+
+def pipeline(video_path, head_onnx_path, facelms_onnx_path):
+    global adjust_signal
     head_ort_session = ort.InferenceSession(head_onnx_path)
     facelms_ort_session = ort.InferenceSession(facelms_onnx_path)
-    state_ort_session = ort.InferenceSession(state_onnx_path)
 
-    state_input_name = state_ort_session.get_inputs()[0].name
-    head_position_queue = MyQueue(queue_size=60, element_dim=4, pool_window=1)
-    state_queue = MyQueue(queue_size=6,  element_dim=2)
+    bbox_queue = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
+    lms_queue  = MyQueue(queue_size=30, element_dim=10, pool_window=2)
+
+    last_desp, last_pts2d = None, None
     desk = VirtualDesk()
-
-
-    def _2eyes_nose_2mouth_(landmarks):
-        left_eye  = np.mean(landmarks[60:67, :], axis=0)
-        right_eye = np.mean(landmarks[68:75, :], axis=0) 
-        nose      = landmarks[54]
-        left_mouth = landmarks[76]
-        right_mouth = landmarks[82]
-        return np.array([left_eye, right_eye, nose, left_mouth, right_mouth])
 
     # cap = cv2.VideoCapture(video_path)
     cap = cv2.VideoCapture(0)
+    last_lms = np.ones((5, 2))
+    counter = 0
     while True:
         _, ori_image = cap.read()
+        ori_image = cv2.resize(ori_image, (img_size[1], img_size[0]))
         if ori_image is None:
             break
+
         box = detect_head(ori_image, head_ort_session)
         if not box is None:
             head_img = ori_image[box[1]:box[3], box[0]:box[2]]
             facelms = detect_facelms_v2(head_img, facelms_ort_session)
-            facelms = [ [box[0]+x, box[1]+y] for (x, y) in facelms.astype(np.int32).tolist()]
+            pts5p_2d = _2eyes_nose_2mouth_(np.array(facelms)).astype(np.int32).tolist()
+            absolute_pts5p_2d = [[box[0]+x, box[1]+y] for (x, y) in pts5p_2d]
 
-            pts5p_2d = _2eyes_nose_2mouth_(np.array(facelms))
-            rot_vec, trt_vec = pose_estimate(pts5p_2d, img_size=ori_image.shape)
-            print('-------------------------\n', rot_vec, '||||\n', trt_vec,
-              '\n-------------------------\n')
-            #head_position_queue.enqueue(np.array(box))
+            lms_queue.enqueue(np.array(absolute_pts5p_2d).reshape(-1))
+            bbox_queue.enqueue(box.reshape(-1))
 
-            ## get the human state and update state queue
-            #feature = np.array(head_position_queue.to_feature()).astype(
-            #    np.float32).reshape(1, -1)
-            ## state = state_ort_session.run(
-            ##     None, {state_input_name: feature})[0][0]
-            #state = [0, 1.0]
-            ## smooth the state or not ?
-            #state_queue.enqueue(state)
+            last_lms = absolute_pts5p_2d
+
+            # for debug
             cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)
-            for l in facelms:
-                cv2.circle(ori_image, (l[0], l[1]), 2, (255,0,0), 2)
-        #else:
-        #    # there should be a module that processes exceptions, e.g. no head detected, 
-        #    head_position_queue.enqueue(np.zeros(4))
-        #    state_queue.enqueue(np.array([0, 1.0], dtype=np.float32))
+            for l in absolute_pts5p_2d:
+                cv2.circle(ori_image, (l[0], l[1]), 2, (255, 0, 0), 2)
+        else:
+            # there should be a module that processes exceptions, e.g. no head detected,
+            bbox_queue.enqueue(np.array([0,0,0,0]).reshape(-1))
+            lms_queue.enqueue(np.array(last_lms).reshape(-1))
+
+        counter = (counter + 1) % detect_interval
+        if counter == 0 and not box is None:
+            trigger_adjust_signal(ori_image, box)
+        
+        if counter == 0:
+            check_adjust_signal(lms_queue, bbox_queue)
+
+        if counter == 0:
+            adjust_actor(lms_queue, bbox_queue)
 
         cv2.imshow('annotated', ori_image)
-        if cv2.waitKey(-1) & 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-    
     cap.release()
 
 if __name__ == '__main__':
     video_path = "data/WFJ_video_main2.mp4"
     head_onnx_path = "weights/lite_head_detection_simplied.onnx"
     facelms_onnx_path = "weights/facelms_112x112.onnx"
-    state_onnx_path = "weights/pose_state_classifier.onnx"
-    pipeline(video_path, head_onnx_path, facelms_onnx_path, state_onnx_path)
+    pipeline(video_path, head_onnx_path, facelms_onnx_path)
