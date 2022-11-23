@@ -1,12 +1,13 @@
 '''
 Author: Peng Bo
 Date: 2022-11-21 14:33:35
-LastEditTime: 2022-11-23 11:11:33
+LastEditTime: 2022-11-23 13:02:49
 Description: 
 
 '''
 import cv2
 import numpy as np
+import math
 import pdb
 
 points_3d = np.array([
@@ -24,7 +25,6 @@ points3p_3d = np.array([
 ], dtype = np.float64)
 
 eye_center = (points_3d[0] + points_3d[1]) / 2
-
 focal_length = 400
 
 def trt_vec2height(trt_vec, src_eye=eye_center, desk_height=500, camera_angle=30):
@@ -36,7 +36,14 @@ def trt_vec2height(trt_vec, src_eye=eye_center, desk_height=500, camera_angle=30
             - camera_angle: the angle of the camera
         Return the distance between eye_center with camera in vertical direction
     """
-    return 0
+    trt_eye   = src_eye + trt_vec[:,0]
+    rot_mat   = np.array([
+        [1, 0, 0],
+        [0, math.cos(camera_angle/180*math.pi), math.sin(camera_angle/180*math.pi)],
+        [0, -math.sin(camera_angle/180*math.pi), math.cos(camera_angle/180*math.pi)]
+    ])
+    eye_world = np.dot(rot_mat, np.array(trt_eye).T) 
+    return eye_world[1]
 
 def pose_estimate(pts_2d, pts_3d=points_3d, img_size=(180, 320), dist_coeffs=np.zeros((4, 1))):
     focal_length = max(img_size[0], img_size[1])

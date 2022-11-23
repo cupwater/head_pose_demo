@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-23 11:22:50
+LastEditTime: 2022-11-23 12:55:37
 Description: 
 
 '''
@@ -75,6 +75,7 @@ def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
     # mapping the translate vector to world coordinates
     desk_height = desk.get_height()
     eye_height = trt_vec2height(trt_vec, desk_height=desk_height)
+    print(eye_height)
 
     # judge the state of head according to history_pts5p_2d
     # the position of head remaining stable indicates static, otherwise move
@@ -82,14 +83,17 @@ def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
     diff_pts5d_std = np.sum(np.std(diff_pts5p_2d, axis=0))
     if diff_pts5d_std > 0.5 and abs(desk_height - eye_height) < move_threshold:
         adjust_signal = False
-
+    
     return eye_height
 
 
-def adjust_actor(desk: VirtualDesk):
+def adjust_actor(eye_height, desk: VirtualDesk, threshold=20):
     """adjust the height of display according to the trt_vec
     """
-    return
+    desk_height = desk.get_height()
+    distance = eye_height - desk_height
+    if abs(distance) < threshold:
+        desk.adjust(distance)
 
 
 def pipeline(video_path, head_onnx_path, facelms_onnx_path):
@@ -116,6 +120,7 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
         box = detect_head(ori_image, head_ort_session)
         if not box is None:
             head_img = ori_image[box[1]:box[3], box[0]:box[2]]
+            print(head_img.shape)
             facelms = detect_facelms_v2(head_img, facelms_ort_session)
             pts5p_2d = _2eyes_nose_2mouth_(np.array(facelms)).astype(np.int32).tolist()
             absolute_pts5p_2d = [[box[0]+x, box[1]+y] for (x, y) in pts5p_2d]
@@ -139,10 +144,13 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             trigger_adjust_signal(ori_image, box)
         
         if counter == 0:
-            check_adjust_signal(lms_queue, bbox_queue, desk)
+            eye_height = check_adjust_signal(lms_queue, bbox_queue, desk)
+
+        if adjust_signal:
+            print(f'need to adjust desk, current eye: {eye_height}')
 
         if counter == 0:
-            adjust_actor(lms_queue, bbox_queue)
+            adjust_actor(eye_height, desk)
 
         cv2.imshow('annotated', ori_image)
         if cv2.waitKey(1) & 0xFF == ord('q'):
