@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-23 12:55:37
+LastEditTime: 2022-11-23 16:43:42
 Description: 
 
 '''
@@ -104,7 +104,6 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
     bbox_queue = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
     lms_queue  = MyQueue(queue_size=30, element_dim=10, pool_window=2)
 
-    last_desp, last_pts2d = None, None
     desk = VirtualDesk()
 
     # cap = cv2.VideoCapture(video_path)
@@ -120,7 +119,6 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
         box = detect_head(ori_image, head_ort_session)
         if not box is None:
             head_img = ori_image[box[1]:box[3], box[0]:box[2]]
-            print(head_img.shape)
             facelms = detect_facelms_v2(head_img, facelms_ort_session)
             pts5p_2d = _2eyes_nose_2mouth_(np.array(facelms)).astype(np.int32).tolist()
             absolute_pts5p_2d = [[box[0]+x, box[1]+y] for (x, y) in pts5p_2d]

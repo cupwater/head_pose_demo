@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-11-22 14:35:12
-LastEditTime: 2022-11-22 16:30:15
+LastEditTime: 2022-11-23 17:02:18
 Description: 
 
 '''
@@ -84,6 +84,8 @@ def get_avg_distance(pts2d_1, desps_1, pts2d_2, desps_2):
     search_params = dict(checks=50)
 
     flann = cv2.FlannBasedMatcher(index_params, search_params)
+    print(desps_1.shape)
+    print(desps_2.shape)
     matches = flann.knnMatch(desps_1, desps_2, k=2)
     valid_matches = []
     for i, (m, n) in enumerate(matches):
