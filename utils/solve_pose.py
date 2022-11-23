@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-11-21 14:33:35
-LastEditTime: 2022-11-22 10:51:43
+LastEditTime: 2022-11-23 11:11:33
 Description: 
 
 '''
@@ -23,8 +23,20 @@ points3p_3d = np.array([
     [  0.55592  ,   6.5629   ,  25.944448 ]
 ], dtype = np.float64)
 
+eye_center = (points_3d[0] + points_3d[1]) / 2
 
 focal_length = 400
+
+def trt_vec2height(trt_vec, src_eye=eye_center, desk_height=500, camera_angle=30):
+    """get the world coordinate of the eye according the translate vector  
+        Params:
+            - trt_vec: translate vector
+            - src_eye: position of the eye before translate
+            - desk_height: the distance between camera to display center
+            - camera_angle: the angle of the camera
+        Return the distance between eye_center with camera in vertical direction
+    """
+    return 0
 
 def pose_estimate(pts_2d, pts_3d=points_3d, img_size=(180, 320), dist_coeffs=np.zeros((4, 1))):
     focal_length = max(img_size[0], img_size[1])

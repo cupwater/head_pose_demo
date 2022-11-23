@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-22 16:59:12
+LastEditTime: 2022-11-23 11:22:50
 Description: 
 
 '''
@@ -13,7 +13,7 @@ import onnxruntime as ort
 
 from detect_head import detect_head
 from detect_facelms_v2 import detect_facelms_v2
-from utils.solve_pose import pose_estimate
+from utils.solve_pose import pose_estimate, trt_vec2height
 from utils.head2body_box import head2body_box1
 from utils.sift_feature import filter_sift_descriptors, get_avg_distance
 from utils.VirtualDesk import VirtualDesk
@@ -25,6 +25,7 @@ adjust_signal = False
 last_desp, last_pts2d = None, None
 img_size = (540, 960)
 detect_interval = 10
+move_threshold = 2
 
 def _2eyes_nose_2mouth_(landmarks):
     """ get [eyes, nose, mouth] landmarks from WLFW landmarks detection  
@@ -46,7 +47,6 @@ def trigger_adjust_signal(image, box):
     pts2d, desps = filter_sift_descriptors(image, head2body_box1(image, box))
     if not last_desp is None:
         camera_move_distance = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
-        pdb.set_trace()
         # when move_distance over threshold xx, trigger the signal for adjust
         if camera_move_distance > 0.1:
             adjust_signal = True 
@@ -54,7 +54,7 @@ def trigger_adjust_signal(image, box):
     last_pts2d = pts2d
 
 
-def check_adjust_signal(lms_queue, bbox_queue):
+def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
     """check whether to reset the adjust signal according the lms and bbox queues,
         we reset the adjust signal when it comes such situations:
         - 1. no facebox detecting continuous ();
@@ -67,17 +67,28 @@ def check_adjust_signal(lms_queue, bbox_queue):
     avg_box = np.mean(np.array(history_boxes).reshape(-1, 4), axis=0)
     if avg_box[2] < 10 and avg_box[3] < 10:
         adjust_signal = False
-        return
-    
-    pdb.set_trace()
 
     # situation 2
     history_pts5p_2d = lms_queue.lastest_k(k=15)
-    rot_vec, trt_vec = pose_estimate(lms_queue.smooth().reshape(-1, 2), img_size=img_size)
-    return
+    history_pts5p_2d = np.array(history_pts5p_2d).reshape(-1, 10)
+    _, trt_vec = pose_estimate(lms_queue.smooth().reshape(-1, 2), img_size=img_size)
+    # mapping the translate vector to world coordinates
+    desk_height = desk.get_height()
+    eye_height = trt_vec2height(trt_vec, desk_height=desk_height)
+
+    # judge the state of head according to history_pts5p_2d
+    # the position of head remaining stable indicates static, otherwise move
+    diff_pts5p_2d = history_pts5p_2d[:-1, :] - history_pts5p_2d[1:, :]
+    diff_pts5d_std = np.sum(np.std(diff_pts5p_2d, axis=0))
+    if diff_pts5d_std > 0.5 and abs(desk_height - eye_height) < move_threshold:
+        adjust_signal = False
+
+    return eye_height
 
 
 def adjust_actor(desk: VirtualDesk):
+    """adjust the height of display according to the trt_vec
+    """
     return
 
 
@@ -128,7 +139,7 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             trigger_adjust_signal(ori_image, box)
         
         if counter == 0:
-            check_adjust_signal(lms_queue, bbox_queue)
+            check_adjust_signal(lms_queue, bbox_queue, desk)
 
         if counter == 0:
             adjust_actor(lms_queue, bbox_queue)
