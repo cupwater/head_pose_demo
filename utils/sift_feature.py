@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-11-22 14:35:12
-LastEditTime: 2022-11-23 17:02:18
+LastEditTime: 2022-11-23 19:54:21
 Description: 
 
 '''
@@ -22,6 +22,7 @@ def filter_sift_descriptors(img, box):
     filter_pts_2d, filter_descriptors = [], []
 
     def _is_in_box_(x, y):
+        return False
         if (x>box[0] and x<box[2]) and (y>box[1] and y<box[3]):
             return True
         else:
@@ -60,14 +61,18 @@ def get_avg_distance(pts2d_1, desps_1, pts2d_2, desps_2):
     flann = cv2.FlannBasedMatcher(index_params, search_params)
     matches = flann.knnMatch(desps_1, desps_2, k=2)
     valid_matches = []
+    matchesMask = [[0, 0] for i in range(len(matches))]
+
     for i, (m, n) in enumerate(matches):
-        if m.distance < 0.7 * n.distance:
+        if m.distance < 0.2 * n.distance:
             valid_matches.append(m)
+            matchesMask[i] = [1, 0]
+
 
     src_pts = np.float32([pts2d_1[i.queryIdx].pt for i in valid_matches])
     dst_pts = np.float32([pts2d_2[i.trainIdx].pt for i in valid_matches])
     avg_distance = np.linalg.norm(src_pts - dst_pts, ord=1)
-    return avg_distance
+    return avg_distance, matchesMask, matches
 
 def sift_match(img_1, img_2, box_1, box_2):
     pts2d_1, desps_1 = filter_sift_descriptors(img_1, box_1)
