@@ -58,7 +58,6 @@ def detect_head(ori_image, ort_session, input_size=(320, 240)):
     confidences, boxes = ort_session.run(None, {input_name: image})
     boxes, labels, probs = predict((w,h), confidences, boxes, prob_threshold=0.6)
 
-    print(boxes)
     if len(boxes) == 0:
         return None
     # get the max area head and return

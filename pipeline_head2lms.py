@@ -44,7 +44,10 @@ def trigger_adjust_signal(image, box):
         we use the SIFT feature point detection and matching to judge the moving of camera
     """
     global adjust_signal, last_desp, last_pts2d
-    pts2d, desps = filter_sift_descriptors(image, head2body_box1(image, box))
+    box = head2body_box1(image, box)
+    if 2*(box[2]-box[0])*(box[3]-box[1]) > image.shape[0]*image.shape[1]:
+        return
+    pts2d, desps = filter_sift_descriptors(image, box)
     if not last_desp is None:
         camera_move_distance = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
         # when move_distance over threshold xx, trigger the signal for adjust
@@ -75,7 +78,6 @@ def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
     # mapping the translate vector to world coordinates
     desk_height = desk.get_height()
     eye_height = trt_vec2height(trt_vec, desk_height=desk_height)
-    print(eye_height)
 
     # judge the state of head according to history_pts5p_2d
     # the position of head remaining stable indicates static, otherwise move
