@@ -2,7 +2,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:17:57
-LastEditTime: 2022-09-25 10:56:04
+LastEditTime: 2022-11-23 16:41:16
 Description: 
 
 '''
@@ -56,10 +56,6 @@ def detect_head(ori_image, ort_session, input_size=(320, 240)):
 
     image = _preprocess(ori_image)
     confidences, boxes = ort_session.run(None, {input_name: image})
-
-    # import pdb
-    # pdb.set_trace()
-
     boxes, labels, probs = predict((w,h), confidences, boxes, prob_threshold=0.6)
 
     if len(boxes) == 0:
@@ -72,7 +68,12 @@ def detect_head(ori_image, ort_session, input_size=(320, 240)):
         if max_area < cur_area:
             max_area = cur_area
             max_idx = i
-    return boxes[max_idx]
+    box = boxes[max_idx]
+    box[0] = max(box[0], 0)
+    box[1] = max(box[1], 0)
+    box[2] = min(box[2], ori_image.shape[1])
+    box[3] = min(box[3], ori_image.shape[0])
+    return box
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-11-22 14:35:12
-LastEditTime: 2022-11-22 16:30:15
+LastEditTime: 2022-11-23 17:02:18
 Description: 
 
 '''
@@ -47,32 +47,6 @@ def desp_match(desps_1, desps_2):
         if m.distance < 0.7 * n.distance:
             matchesMask[i] = [1, 0]
     return matchesMask
-
-
-def my_match(img1, img2, kp1, kp2, des1, des2, mc_type):
-    #不难发现，m,n就是对应刚才的2
-    for m,n in matches:
-        if m.distance < 0.95 *n.distance:
-            print(m.distance)
-            print(m.queryIdx)
-            print('---end---')
-            # print(n.imgIdx)
-            good.append(m)
-    if len(good) > 10:
-        src_pts = np.float32([sift_kp_1[i.queryIdx].pt for i in good])#.\reshape(-1, 1, 2)
-        dst_pts = np.float32([sift_kp_2[i.trainIdx].pt for i in good])#.reshape(-1, 1, 2)
-        # print(src_pts.shape)
-        # print(dst_pts.shape)
-        ransacReprojThreshold = 10.0
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, ransacReprojThreshold)
-        matchesMask = mask.ravel().tolist()
-        h, w, mode = img1.shape
-        pts = np.float32([[0, 0], [0, h -1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
-    #透视变换函数cv2.perspectiveTransform: 输入的参数是两种数组，并返回dst矩阵——扭转矩阵
-        dst = cv2.perspectiveTransform(pts, M)
-        img2 = cv2.polylines(img2, [np.int32(dst)], True, (127,255,0), 3, cv2.LINE_AA)
-
-
 
 def is_background_move(desps_1, desps_2):
     matchesMask = desp_match(desps_1, desps_2) 

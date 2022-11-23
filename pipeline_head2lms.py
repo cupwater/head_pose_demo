@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-23 12:55:37
+LastEditTime: 2022-11-23 16:43:42
 Description: 
 
 '''
@@ -44,7 +44,10 @@ def trigger_adjust_signal(image, box):
         we use the SIFT feature point detection and matching to judge the moving of camera
     """
     global adjust_signal, last_desp, last_pts2d
-    pts2d, desps = filter_sift_descriptors(image, head2body_box1(image, box))
+    box = head2body_box1(image, box)
+    if 2*(box[2]-box[0])*(box[3]-box[1]) > image.shape[0]*image.shape[1]:
+        return
+    pts2d, desps = filter_sift_descriptors(image, box)
     if not last_desp is None:
         camera_move_distance = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
         # when move_distance over threshold xx, trigger the signal for adjust
@@ -75,7 +78,6 @@ def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
     # mapping the translate vector to world coordinates
     desk_height = desk.get_height()
     eye_height = trt_vec2height(trt_vec, desk_height=desk_height)
-    print(eye_height)
 
     # judge the state of head according to history_pts5p_2d
     # the position of head remaining stable indicates static, otherwise move
@@ -104,7 +106,6 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
     bbox_queue = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
     lms_queue  = MyQueue(queue_size=30, element_dim=10, pool_window=2)
 
-    last_desp, last_pts2d = None, None
     desk = VirtualDesk()
 
     # cap = cv2.VideoCapture(video_path)
@@ -120,7 +121,6 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
         box = detect_head(ori_image, head_ort_session)
         if not box is None:
             head_img = ori_image[box[1]:box[3], box[0]:box[2]]
-            print(head_img.shape)
             facelms = detect_facelms_v2(head_img, facelms_ort_session)
             pts5p_2d = _2eyes_nose_2mouth_(np.array(facelms)).astype(np.int32).tolist()
             absolute_pts5p_2d = [[box[0]+x, box[1]+y] for (x, y) in pts5p_2d]

@@ -34,9 +34,9 @@ def head2body_box1(img, head_box):
     center_x = (head_box[0]+head_box[2]) / 2
     center_y = (head_box[1]+head_box[3]) / 2
     width = min(head_box[2]-head_box[0], head_box[3]-head_box[1])
-    body_x1 = int(max(center_x - width*2, 0))
-    body_x2 = int(min(center_x + width*2, img.shape[1]))
+    body_x1 = int(max(center_x - width*1.3, 0))
     body_y1 = int(max(center_y - width*1, 0))
+    body_x2 = int(min(center_x + width*1.3, img.shape[1]))
     body_y2 = int(min(center_y + width*5, img.shape[0]))
     return [body_x1, body_y1, body_x2, body_y2]
 
