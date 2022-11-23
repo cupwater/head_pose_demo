@@ -149,7 +149,7 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
         if adjust_signal:
             print(f'need to adjust desk, current eye: {eye_height}')
 
-        if counter == 0:
+        if counter == 0 and adjust_signal:
             adjust_actor(eye_height, desk)
 
         cv2.imshow('annotated', ori_image)
