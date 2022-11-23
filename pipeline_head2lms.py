@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-23 16:43:42
+LastEditTime: 2022-11-23 19:41:44
 Description: 
 
 '''
@@ -43,18 +43,31 @@ def trigger_adjust_signal(image, box):
     """ check whether to trigger adjust signal through the camera moving, \n
         we use the SIFT feature point detection and matching to judge the moving of camera
     """
-    global adjust_signal, last_desp, last_pts2d
+    global adjust_signal, last_desp, last_pts2d, last_image
     box = head2body_box1(image, box)
     if 2*(box[2]-box[0])*(box[3]-box[1]) > image.shape[0]*image.shape[1]:
         return
     pts2d, desps = filter_sift_descriptors(image, box)
     if not last_desp is None:
-        camera_move_distance = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
+        camera_move_distance, matchesMask, matches = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
+
+        draw_params = dict(matchColor=(0, 255, 0),
+                        singlePointColor=(255, 0, 0), 
+                        matchesMask=matchesMask,
+                        flags=0)
+        flannmaches = cv2.drawMatchesKnn(image, pts2d, last_image, 
+                            last_pts2d, matches, None, **draw_params)
+
+        cv2.imshow('matches', flannmaches)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            exit(1)
+
         # when move_distance over threshold xx, trigger the signal for adjust
         if camera_move_distance > 0.1:
             adjust_signal = True 
     last_desp  = desps
     last_pts2d = pts2d
+    last_image = image
 
 
 def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
