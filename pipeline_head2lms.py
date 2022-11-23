@@ -22,10 +22,12 @@ from utils.myqueue import MyQueue
 import pdb
 
 adjust_signal = False
-last_desp, last_pts2d = None, None
+standard_box_lms  = None
+standard_box_hw   = [260, 190]
+standard_hw_ratio = 260.0/190
 img_size = (540, 960)
-detect_interval = 10
-move_threshold = 2
+detect_interval = 3
+
 
 def _2eyes_nose_2mouth_(landmarks):
     """ get [eyes, nose, mouth] landmarks from WLFW landmarks detection  
@@ -39,35 +41,40 @@ def _2eyes_nose_2mouth_(landmarks):
     return np.array([left_eye, right_eye, nose, left_mouth, right_mouth])
 
 
-def trigger_adjust_signal(image, box):
+def is_standard_pose(box, lms, diff_th=0.15, ratio_hw_th=0.2, hw_th=0.2):
+    global standard_box_lms
+    if standard_box_lms is None:
+        standard_box_lms = (box, lms)
+        return False
+    lms, box = np.array(lms), np.array(box)
+
+    eye_center, mouth_center = (lms[0] + lms[1])/2, (lms[3] + lms[4])/2 
+    box_center = [(box[0]+box[2])/2, (box[1]+box[3])/2]
+
+    x_diff = abs(eye_center[0]-box_center[0]) + abs(mouth_center[0]-box_center[0]) + \
+                    abs(lms[2][0]-box_center[0])
+    x_diff = x_diff/(box[2]-box[0])
+    hw_ratio = 1.0*(box[3]-box[1]) / (box[2]-box[0])
+
+    print(x_diff)
+    print(hw_ratio)
+    print(f"{box[2]-box[0]} \t {box[3]-box[1]}")
+    if x_diff < diff_th and abs(hw_ratio-standard_hw_ratio)<ratio_hw_th:
+        if abs(1-1.0*(box[2]-box[0])/(standard_box_hw[1])) < hw_th and \
+                abs(1-1.0*(box[3]-box[1])/(standard_box_hw[0])) < hw_th:
+            return True
+    return False
+
+
+def trigger_adjust_signal(image, box, lms_queue, bbox_queue):
     """ check whether to trigger adjust signal through the camera moving, \n
         we use the SIFT feature point detection and matching to judge the moving of camera
     """
-    global adjust_signal, last_desp, last_pts2d, last_image
+    global adjust_signal, standard_box_lms
     box = head2body_box1(image, box)
     if 2*(box[2]-box[0])*(box[3]-box[1]) > image.shape[0]*image.shape[1]:
         return
-    pts2d, desps = filter_sift_descriptors(image, box)
-    if not last_desp is None:
-        camera_move_distance, matchesMask, matches = get_avg_distance(last_pts2d, last_desp, pts2d, desps)
-
-        draw_params = dict(matchColor=(0, 255, 0),
-                        singlePointColor=(255, 0, 0), 
-                        matchesMask=matchesMask,
-                        flags=0)
-        flannmaches = cv2.drawMatchesKnn(image, pts2d, last_image, 
-                            last_pts2d, matches, None, **draw_params)
-
-        cv2.imshow('matches', flannmaches)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            exit(1)
-
-        # when move_distance over threshold xx, trigger the signal for adjust
-        if camera_move_distance > 0.1:
-            adjust_signal = True 
-    last_desp  = desps
-    last_pts2d = pts2d
-    last_image = image
+    # judge if head is in proper area
 
 
 def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
@@ -112,7 +119,7 @@ def adjust_actor(eye_height, desk: VirtualDesk, threshold=20):
 
 
 def pipeline(video_path, head_onnx_path, facelms_onnx_path):
-    global adjust_signal
+    global adjust_signal, standard_box_lms
     head_ort_session = ort.InferenceSession(head_onnx_path)
     facelms_ort_session = ort.InferenceSession(facelms_onnx_path)
 
@@ -141,10 +148,10 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             lms_queue.enqueue(np.array(absolute_pts5p_2d).reshape(-1))
             bbox_queue.enqueue(box.reshape(-1))
 
-            last_lms = absolute_pts5p_2d
-
-            # for debug
-            cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)
+            is_standard = is_standard_pose(box, absolute_pts5p_2d)
+            text = 'standard' if is_standard else 'casual' 
+            cv2.putText(ori_image, text, (box[0], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 3, (0,255,0), 2)
+            cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 4)
             for l in absolute_pts5p_2d:
                 cv2.circle(ori_image, (l[0], l[1]), 2, (255, 0, 0), 2)
         else:
@@ -152,18 +159,19 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             bbox_queue.enqueue(np.array([0,0,0,0]).reshape(-1))
             lms_queue.enqueue(np.array(last_lms).reshape(-1))
 
-        counter = (counter + 1) % detect_interval
-        if counter == 0 and not box is None:
-            trigger_adjust_signal(ori_image, box)
+
+        #counter = (counter + 1) % detect_interval
+        #if counter == 0 and not box is None:
+        #    trigger_adjust_signal(ori_image, box)
         
-        if counter == 0:
-            eye_height = check_adjust_signal(lms_queue, bbox_queue, desk)
+        #if counter == 0:
+        #    eye_height = check_adjust_signal(lms_queue, bbox_queue, desk)
 
-        if adjust_signal:
-            print(f'need to adjust desk, current eye: {eye_height}')
+        #if adjust_signal:
+        #    print(f'need to adjust desk, current eye: {eye_height}')
 
-        if counter == 0 and adjust_signal:
-            adjust_actor(eye_height, desk)
+        #if counter == 0 and adjust_signal:
+        #    adjust_actor(eye_height, desk)
 
         cv2.imshow('annotated', ori_image)
         if cv2.waitKey(1) & 0xFF == ord('q'):
