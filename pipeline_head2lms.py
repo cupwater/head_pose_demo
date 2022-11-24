@@ -53,11 +53,13 @@ def is_standard_pose(box, lms, diff_th=0.20, ratio_hw_th=0.2, hw_th=0.2, coor_th
     x_diff = x_diff/(box[2]-box[0])
     hw_ratio = 1.0*(box[3]-box[1]) / (box[2]-box[0])
 
+    # if the lms is nearby the center of box
     if x_diff < diff_th and abs(hw_ratio-standard_hw_ratio)<ratio_hw_th:
+        # if the box width and height is similar to standard box
         if abs(1-1.0*(box[2]-box[0])/(standard_box_hw[1])) < hw_th and \
                 abs(1-1.0*(box[3]-box[1])/(standard_box_hw[0])) < hw_th:
             x_bound = [(img_size[1] - standard_box_hw[1])/2, (img_size[1] + standard_box_hw[1])/2]
-
+            # if the box is nearby the standard box in x direction
             if abs(box[0]-x_bound[0])/standard_box_hw[1]<ratio_hw_th and \
                     abs(box[2]-x_bound[1])/standard_box_hw[0]<ratio_hw_th:
                 return True
@@ -158,10 +160,13 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
 
         counter = (counter + 1) % detect_interval
         if counter == 0 and not box is None:
-            trigger_adjust_signal(ori_image, box)
-        
+            trigger_adjust_signal(standard_pose_queue)
+
         if counter == 0:
-            check_adjust_signal(lms_queue, bbox_queue, desk)
+            check_adjust_signal(lms_queue, bbox_queue, standard_pose_queue, desk)
+
+        trigger = 'trigger' if adjust_signal else 'non-trigger'
+        cv2.putText(ori_image, trigger, (50, 50), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0,0,255), 2)
 
         if counter == 0 and adjust_signal:
             adjust_actor(lms_queue, desk)
