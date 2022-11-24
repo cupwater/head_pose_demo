@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-23 19:41:44
+LastEditTime: 2022-11-24 15:14:43
 Description: 
 
 '''
@@ -13,21 +13,14 @@ import onnxruntime as ort
 
 from detect_head import detect_head
 from detect_facelms_v2 import detect_facelms_v2
-from utils.solve_pose import pose_estimate, trt_vec2height
-from utils.head2body_box import head2body_box1
-from utils.sift_feature import filter_sift_descriptors, get_avg_distance
 from utils.VirtualDesk import VirtualDesk
 from utils.myqueue import MyQueue
 
 import pdb
 
-adjust_signal = False
-standard_box_lms  = None
-standard_box_hw   = [260, 190]
-standard_hw_ratio = 260.0/190
-img_size = (540, 960)
-detect_interval = 3
-
+adjust_signal, standard_box_lms = False, None
+standard_box_hw, standard_hw_ratio = [260, 190], 260.0/190
+img_size, detect_interval = (540, 960), 3
 
 def _2eyes_nose_2mouth_(landmarks):
     """ get [eyes, nose, mouth] landmarks from WLFW landmarks detection  
@@ -41,7 +34,11 @@ def _2eyes_nose_2mouth_(landmarks):
     return np.array([left_eye, right_eye, nose, left_mouth, right_mouth])
 
 
-def is_standard_pose(box, lms, diff_th=0.15, ratio_hw_th=0.2, hw_th=0.2):
+def map_lms2world_coord(lms_queue):
+    return 0
+
+
+def is_standard_pose(box, lms, diff_th=0.20, ratio_hw_th=0.2, hw_th=0.2, coor_th=0.25):
     global standard_box_lms
     if standard_box_lms is None:
         standard_box_lms = (box, lms)
@@ -56,35 +53,35 @@ def is_standard_pose(box, lms, diff_th=0.15, ratio_hw_th=0.2, hw_th=0.2):
     x_diff = x_diff/(box[2]-box[0])
     hw_ratio = 1.0*(box[3]-box[1]) / (box[2]-box[0])
 
-    print(x_diff)
-    print(hw_ratio)
-    print(f"{box[2]-box[0]} \t {box[3]-box[1]}")
     if x_diff < diff_th and abs(hw_ratio-standard_hw_ratio)<ratio_hw_th:
         if abs(1-1.0*(box[2]-box[0])/(standard_box_hw[1])) < hw_th and \
                 abs(1-1.0*(box[3]-box[1])/(standard_box_hw[0])) < hw_th:
-            return True
+            x_bound = [(img_size[1] - standard_box_hw[1])/2, (img_size[1] + standard_box_hw[1])/2]
+
+            if abs(box[0]-x_bound[0])/standard_box_hw[1]<ratio_hw_th and \
+                    abs(box[2]-x_bound[1])/standard_box_hw[0]<ratio_hw_th:
+                return True
     return False
 
 
-def trigger_adjust_signal(image, box, lms_queue, bbox_queue):
-    """ check whether to trigger adjust signal through the camera moving, \n
-        we use the SIFT feature point detection and matching to judge the moving of camera
+def trigger_adjust_signal(standard_pose_queue, standard_th=0.88):
+    """ check whether to trigger adjust signal according to the history poses \n
     """
-    global adjust_signal, standard_box_lms
-    box = head2body_box1(image, box)
-    if 2*(box[2]-box[0])*(box[3]-box[1]) > image.shape[0]*image.shape[1]:
-        return
-    # judge if head is in proper area
+    global adjust_signal
+    avg_standard = standard_pose_queue.smooth()
+    if avg_standard > standard_th:
+        adjust_signal = True
 
 
-def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
+def check_adjust_signal(lms_queue, bbox_queue, standard_pose_queue, \
+                desk: VirtualDesk, nonstandard_th=0.2, move_threshold=0.2):
     """check whether to reset the adjust signal according the lms and bbox queues,
         we reset the adjust signal when it comes such situations:
         - 1. no facebox detecting continuous ();
-        - 2. current head position match desk's height and being stable;
+        - 2. head pose is not being in standard pose continuous ();
+        - 3. current head position match desk's height and being stable;
     """
     global adjust_signal
-
     # situation 1
     history_boxes = bbox_queue.lastest_k(k=15)
     avg_box = np.mean(np.array(history_boxes).reshape(-1, 4), axis=0)
@@ -92,28 +89,25 @@ def check_adjust_signal(lms_queue, bbox_queue, desk: VirtualDesk):
         adjust_signal = False
 
     # situation 2
-    history_pts5p_2d = lms_queue.lastest_k(k=15)
-    history_pts5p_2d = np.array(history_pts5p_2d).reshape(-1, 10)
-    _, trt_vec = pose_estimate(lms_queue.smooth().reshape(-1, 2), img_size=img_size)
-    # mapping the translate vector to world coordinates
-    desk_height = desk.get_height()
-    eye_height = trt_vec2height(trt_vec, desk_height=desk_height)
-
-    # judge the state of head according to history_pts5p_2d
-    # the position of head remaining stable indicates static, otherwise move
-    diff_pts5p_2d = history_pts5p_2d[:-1, :] - history_pts5p_2d[1:, :]
-    diff_pts5d_std = np.sum(np.std(diff_pts5p_2d, axis=0))
-    if diff_pts5d_std > 0.5 and abs(desk_height - eye_height) < move_threshold:
+    avg_standard = standard_pose_queue.smooth()
+    if avg_standard < nonstandard_th:
         adjust_signal = False
-    
-    return eye_height
+
+    desk_height = desk.get_height()
+    if avg_standard > 0.9:
+        desk_height = desk.get_height()
+        # mapping the lms to world coordinate
+        world_height = map_lms2world_coord(lms_queue)
+        if (world_height - desk_height) < move_threshold:
+            adjust_signal = False
 
 
-def adjust_actor(eye_height, desk: VirtualDesk, threshold=20):
+def adjust_actor(lms_queue, desk: VirtualDesk, threshold=20):
     """adjust the height of display according to the trt_vec
     """
     desk_height = desk.get_height()
-    distance = eye_height - desk_height
+    eye_height  = lms_queue.get_average()
+    distance = abs(eye_height - desk_height)
     if abs(distance) < threshold:
         desk.adjust(distance)
 
@@ -123,8 +117,9 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
     head_ort_session = ort.InferenceSession(head_onnx_path)
     facelms_ort_session = ort.InferenceSession(facelms_onnx_path)
 
-    bbox_queue = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
-    lms_queue  = MyQueue(queue_size=30, element_dim=10, pool_window=2)
+    bbox_queue    = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
+    lms_queue     = MyQueue(queue_size=30, element_dim=10, pool_window=2)
+    standard_pose_queue = MyQueue(queue_size=15, element_dim=1, pool_window=2)
 
     desk = VirtualDesk()
 
@@ -149,6 +144,8 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             bbox_queue.enqueue(box.reshape(-1))
 
             is_standard = is_standard_pose(box, absolute_pts5p_2d)
+            standard_pose_queue.enqueue(np.array([1 if is_standard else 0]))
+
             text = 'standard' if is_standard else 'casual' 
             cv2.putText(ori_image, text, (box[0], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 3, (0,255,0), 2)
             cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 4)
@@ -159,19 +156,15 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             bbox_queue.enqueue(np.array([0,0,0,0]).reshape(-1))
             lms_queue.enqueue(np.array(last_lms).reshape(-1))
 
-
-        #counter = (counter + 1) % detect_interval
-        #if counter == 0 and not box is None:
-        #    trigger_adjust_signal(ori_image, box)
+        counter = (counter + 1) % detect_interval
+        if counter == 0 and not box is None:
+            trigger_adjust_signal(ori_image, box)
         
-        #if counter == 0:
-        #    eye_height = check_adjust_signal(lms_queue, bbox_queue, desk)
+        if counter == 0:
+            check_adjust_signal(lms_queue, bbox_queue, desk)
 
-        #if adjust_signal:
-        #    print(f'need to adjust desk, current eye: {eye_height}')
-
-        #if counter == 0 and adjust_signal:
-        #    adjust_actor(eye_height, desk)
+        if counter == 0 and adjust_signal:
+            adjust_actor(lms_queue, desk)
 
         cv2.imshow('annotated', ori_image)
         if cv2.waitKey(1) & 0xFF == ord('q'):
