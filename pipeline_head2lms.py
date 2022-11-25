@@ -28,42 +28,46 @@ def _2eyes_nose_2mouth_(landmarks):
     landmarks = landmarks.reshape(-1, 2)
     left_eye = np.mean(landmarks[[60, 61, 63, 64, 65, 67], :], axis=0)
     right_eye = np.mean(landmarks[[68, 69, 71, 72, 73, 75], :], axis=0)
-    nose = landmarks[57]
-    left_mouth = landmarks[76]
-    right_mouth = landmarks[82]
-    return np.array([left_eye, right_eye, nose, left_mouth, right_mouth])
+    center_nose = np.mean(landmarks[51:60, :], axis=0)
+    center_mouth = np.mean(landmarks[76:96, :], axis=0)
+    #left_mouth = landmarks[76]
+    #right_mouth = landmarks[82]
+    return np.array([left_eye, right_eye, center_nose, center_mouth])
 
 
 def map_lms2world_coord(lms_queue):
     return 0
 
 
-def is_standard_pose(box, lms, diff_th=0.20, ratio_hw_th=0.2, hw_th=0.2, coor_th=0.25):
+def is_standard_pose(box, lms, diff_th=0.25, ratio_hw_th=0.2, hw_th=0.2, coor_th=0.25):
     global standard_box_lms
     if standard_box_lms is None:
         standard_box_lms = (box, lms)
         return False
     lms, box = np.array(lms), np.array(box)
 
-    eye_center, mouth_center = (lms[0] + lms[1])/2, (lms[3] + lms[4])/2 
+    eye_center, mouth_center = (lms[0] + lms[1])/2, lms[3] 
     box_center = [(box[0]+box[2])/2, (box[1]+box[3])/2]
 
     x_diff = abs(eye_center[0]-box_center[0]) + abs(mouth_center[0]-box_center[0]) + \
                     abs(lms[2][0]-box_center[0])
     x_diff = x_diff/(box[2]-box[0])
     hw_ratio = 1.0*(box[3]-box[1]) / (box[2]-box[0])
+    if x_diff < diff_th:
+        return True
 
-    # if the lms is nearby the center of box
-    if x_diff < diff_th and abs(hw_ratio-standard_hw_ratio)<ratio_hw_th:
-        # if the box width and height is similar to standard box
-        if abs(1-1.0*(box[2]-box[0])/(standard_box_hw[1])) < hw_th and \
-                abs(1-1.0*(box[3]-box[1])/(standard_box_hw[0])) < hw_th:
-            x_bound = [(img_size[1] - standard_box_hw[1])/2, (img_size[1] + standard_box_hw[1])/2]
-            # if the box is nearby the standard box in x direction
-            if abs(box[0]-x_bound[0])/standard_box_hw[1]<ratio_hw_th and \
-                    abs(box[2]-x_bound[1])/standard_box_hw[0]<ratio_hw_th:
-                return True
-    return False
+
+    # # if the lms is nearby the center of box
+    # if x_diff < diff_th and abs(hw_ratio-standard_hw_ratio)<ratio_hw_th:
+    #     # if the box width and height is similar to standard box
+    #     if abs(1-1.0*(box[2]-box[0])/(standard_box_hw[1])) < hw_th and \
+    #             abs(1-1.0*(box[3]-box[1])/(standard_box_hw[0])) < hw_th:
+    #         x_bound = [(img_size[1] - standard_box_hw[1])/2, (img_size[1] + standard_box_hw[1])/2]
+    #         # if the box is nearby the standard box in x direction
+    #         if abs(box[0]-x_bound[0])/standard_box_hw[1]<ratio_hw_th and \
+    #                 abs(box[2]-x_bound[1])/standard_box_hw[0]<ratio_hw_th:
+    #             return True
+    # return False
 
 
 def trigger_adjust_signal(standard_pose_queue, standard_th=0.88):
@@ -120,14 +124,14 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
     facelms_ort_session = ort.InferenceSession(facelms_onnx_path)
 
     bbox_queue    = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
-    lms_queue     = MyQueue(queue_size=30, element_dim=10, pool_window=2)
+    lms_queue     = MyQueue(queue_size=30, element_dim=8, pool_window=2)
     standard_pose_queue = MyQueue(queue_size=15, element_dim=1, pool_window=2)
 
     desk = VirtualDesk()
 
     # cap = cv2.VideoCapture(video_path)
     cap = cv2.VideoCapture(0)
-    last_lms = np.ones((5, 2))
+    last_lms = np.ones((4, 2))
     counter = 0
     while True:
         _, ori_image = cap.read()
