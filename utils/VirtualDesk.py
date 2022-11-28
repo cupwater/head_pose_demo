@@ -1,5 +1,12 @@
+'''
+Author: Peng Bo
+Date: 2022-11-24 09:54:29
+LastEditTime: 2022-11-28 10:21:05
+Description: 
+
+'''
 class VirtualDesk:
-    def __init__(self, init_height=120, height_range=(100, 160)):
+    def __init__(self, init_height=40, height_range=(35, 50)):
         self.height_range = height_range
         self.height = init_height
 

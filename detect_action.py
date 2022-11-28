@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-16 21:43:34
-LastEditTime: 2022-10-18 15:46:36
+LastEditTime: 2022-11-24 18:14:07
 Description: 
 
 '''
@@ -13,17 +13,15 @@ import onnxruntime as ort
 from utils.myqueue import MyQueue
 
 action_list = [
-    '吃零食',
-    '喝水',
-    '咬手指',
-    '瞌睡',
-    '发呆',
-    '玩橡皮',
-    '离开书桌',
-    '正常'
+    'normal',
+    'chew',
+    'drink',
+    'eating',
+    'leaving',
+    'playing'
 ]
 
-def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, frame_len=12, input_size=(320, 240)):
+def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, frame_len=12, input_size=(224, 224)):
     '''
         smodel: spatial model to extract spatial feature.
         tmodel: temporal model to extract temporal feature.
@@ -40,7 +38,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
     # pre-process the input image 
     def _preprocess(ori_image):
         image = cv2.cvtColor(ori_image.astype(np.float32), cv2.COLOR_BGR2RGB)
-        image = (image - np.array([127, 127, 127])) / 128.0
+        image = (image - np.array([123.675, 116.28, 103.53])) 
+        image = np.divide(image, np.array([58.395, 57.12, 57.375]))
         image = cv2.resize(image, input_size)
         image = np.expand_dims(np.transpose(image, [2, 0, 1]), axis=0)
         image = image.astype(np.float32)
@@ -79,8 +78,8 @@ def detect_action(video, smodel, tmodel, fmodel=None, dets_res=None, step=4, fra
     return inference_res
 
 if __name__ == '__main__':
-    spatial_ort_session  = ort.InferenceSession("weights/r18_smodel_simplied.onnx")
-    temporal_ort_session = ort.InferenceSession("weights/r34_tmodel_simplied.onnx")
+    spatial_ort_session  = ort.InferenceSession("weights/test_simplify.onnx")
+    temporal_ort_session = ort.InferenceSession("weights/test_simplify.onnx")
     video_path = "data/demo.mp4"
     results = detect_action(video_path, spatial_ort_session, temporal_ort_session)
     print(results)

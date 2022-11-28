@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-09-18 10:56:03
-LastEditTime: 2022-11-24 15:14:43
+LastEditTime: 2022-11-28 10:22:31
 Description: 
 
 '''
@@ -16,11 +16,9 @@ from detect_facelms_v2 import detect_facelms_v2
 from utils.VirtualDesk import VirtualDesk
 from utils.myqueue import MyQueue
 
-import pdb
-
 adjust_signal, standard_box_lms = False, None
 standard_box_hw, standard_hw_ratio = [195, 145], 195.0/145
-img_size, detect_interval = (540, 960), 3
+img_size, detect_interval = (540, 960), 5
 
 def _2eyes_nose_2mouth_(landmarks):
     """ get [eyes, nose, mouth] landmarks from WLFW landmarks detection  
@@ -34,8 +32,11 @@ def _2eyes_nose_2mouth_(landmarks):
     #right_mouth = landmarks[82]
     return np.array([left_eye, right_eye, center_nose, center_mouth])
 
-def map_lms2world_coord(lms_queue):
-    return 0
+def map_lms2world_coord(lms_queue: MyQueue):
+    smooth_pts   = lms_queue.smooth()
+    center_eye_y = smooth_pts[1]
+    eye_world_height = 0.05 * (250-center_eye_y) + 40
+    return eye_world_height
 
 def is_standard_distance(box, lms, near_ratio=1.25, far_ratio=0.66):
     global standard_box_lms
@@ -70,7 +71,7 @@ def is_standard_pose(box, lms, threshold=0.25):
     return False
 
 
-def trigger_adjust_signal(box, lms, standard_sign_queue, standard_th=0.88):
+def trigger_adjust_signal(standard_sign_queue, standard_th=0.88):
     """ check whether to trigger adjust signal according to the history poses \n
     """
     global adjust_signal
@@ -78,9 +79,8 @@ def trigger_adjust_signal(box, lms, standard_sign_queue, standard_th=0.88):
     if avg_standard > standard_th:
         adjust_signal = True
 
-
 def check_adjust_signal(lms_queue, bbox_queue, standard_sign_queue, \
-                desk: VirtualDesk, nonstandard_th=0.2, move_threshold=0.2):
+                desk: VirtualDesk, nonstandard_th=0.2, move_threshold=2):
     """check whether to reset the adjust signal according the lms and bbox queues,
         we reset the adjust signal when it comes such situations:
         - 1. no facebox detecting continuous ();
@@ -99,23 +99,45 @@ def check_adjust_signal(lms_queue, bbox_queue, standard_sign_queue, \
     if avg_standard < nonstandard_th:
         adjust_signal = False
 
-    desk_height = desk.get_height()
     if avg_standard > 0.9:
         desk_height = desk.get_height()
         # mapping the lms to world coordinate
         world_height = map_lms2world_coord(lms_queue)
-        if (world_height - desk_height) < move_threshold:
+        print(f'desktop height: {desk_height}, \t eye height: {world_height}')
+        if abs(world_height - desk_height) < move_threshold:
             adjust_signal = False
 
-
-def adjust_actor(lms_queue, desk: VirtualDesk, threshold=20):
+def adjust_actor(lms_queue, desk: VirtualDesk, threshold=10):
     """adjust the height of display according to the trt_vec
     """
     desk_height = desk.get_height()
-    eye_height  = lms_queue.get_average()
-    distance = abs(eye_height - desk_height)
+    eye_height  = map_lms2world_coord(lms_queue)
+    distance = eye_height - desk_height
     if abs(distance) < threshold:
         desk.adjust(distance)
+
+
+def visualize(ori_image, lms, box, pose_sign, distance_sign, position_sign, standard_sign):
+    if pose_sign:
+        cv2.putText(ori_image, "s-pose", (box[0], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
+    else:
+        cv2.putText(ori_image, "c-pose", (box[0], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
+    if distance_sign:
+        cv2.putText(ori_image, "s-dis", (box[0], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
+    else:
+        cv2.putText(ori_image, "c-dis", (box[0], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
+    if position_sign:
+        cv2.putText(ori_image, "s-posi", (box[2], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
+    else:
+        cv2.putText(ori_image, "c-posi", (box[2], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
+    if standard_sign:
+        cv2.putText(ori_image, "standard", (box[2], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
+    else:
+        cv2.putText(ori_image, "casual", (box[2], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
+    cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 4)
+    for l in lms:
+        cv2.circle(ori_image, (l[0], l[1]), 2, (255, 0, 0), 2)
+    return ori_image
 
 
 def pipeline(video_path, head_onnx_path, facelms_onnx_path):
@@ -128,7 +150,6 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
     standard_sign_queue = MyQueue(queue_size=15, element_dim=1, pool_window=2)
 
     desk = VirtualDesk()
-
     # cap = cv2.VideoCapture(video_path)
     cap = cv2.VideoCapture(0)
     last_lms = np.ones((4, 2))
@@ -149,35 +170,15 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
             absolute_pts5p_2d = [[box[0]+x, box[1]+y] for (x, y) in pts5p_2d]
             lms_queue.enqueue(np.array(absolute_pts5p_2d).reshape(-1))
 
-            print(f"{box[2]-box[0]} \t {box[3]-box[1]}")
-
             pose_sign     = is_standard_pose(box, absolute_pts5p_2d)
             distance_sign = is_standard_distance(box, absolute_pts5p_2d)
             position_sign = is_standard_position(box, absolute_pts5p_2d)
-
             standard_sign = pose_sign and distance_sign and position_sign
+
             standard_sign_queue.enqueue(np.array([1 if standard_sign else 0]))
 
-            if pose_sign:
-                cv2.putText(ori_image, "s-pose", (box[0], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
-            else:
-                cv2.putText(ori_image, "c-pose", (box[0], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
-            if distance_sign:
-                cv2.putText(ori_image, "s-dis", (box[0], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
-            else:
-                cv2.putText(ori_image, "c-dis", (box[0], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
-            if position_sign:
-                cv2.putText(ori_image, "s-posi", (box[2], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
-            else:
-                cv2.putText(ori_image, "c-posi", (box[2], box[1]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
-            if standard_sign:
-                cv2.putText(ori_image, "standard", (box[2], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
-            else:
-                cv2.putText(ori_image, "casual", (box[2], box[3]), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255,0,0), 1)
-
-            cv2.rectangle(ori_image, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 4)
-            for l in absolute_pts5p_2d:
-                cv2.circle(ori_image, (l[0], l[1]), 2, (255, 0, 0), 2)
+            ori_image =  visualize(ori_image, absolute_pts5p_2d, box, pose_sign, 
+                                distance_sign, position_sign, standard_sign)
         else:
             # there should be a module that processes exceptions, e.g. no head detected,
             bbox_queue.enqueue(np.array([0,0,0,0]).reshape(-1))
@@ -185,7 +186,7 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
 
         counter = (counter + 1) % detect_interval
         if counter == 0 and not box is None:
-            trigger_adjust_signal(box, absolute_pts5p_2d, standard_sign_queue)
+            trigger_adjust_signal(standard_sign_queue)
 
         if counter == 0:
             check_adjust_signal(lms_queue, bbox_queue, standard_sign_queue, desk)
