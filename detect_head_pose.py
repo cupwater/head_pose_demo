@@ -64,8 +64,9 @@ def detect_head_pose(src_image, ort_session, input_size=(224, 224)):
     input_data = _preprocess(src_image)
     start_time = time.time()
     angles = ort_session.run(None, {input_name: input_data})
-    print("inference time:{}".format(time.time() - start_time))
+    # print("inference time:{}".format(time.time() - start_time))
     headpose = [angles[0].item(), angles[1].item(), angles[2].item()]
+    headpose = [abs(headpose[0]), abs(headpose[1]), abs(headpose[2])]
     return headpose
 
 if __name__ == '__main__':
