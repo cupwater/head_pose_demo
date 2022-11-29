@@ -204,6 +204,7 @@ def pipeline(video_path, head_onnx_path, facelms_onnx_path):
 
 if __name__ == '__main__':
     video_path = "data/WFJ_video_main2.mp4"
-    head_onnx_path = "weights/lite_head_detection_simplied.onnx"
+    #head_onnx_path = "weights/lite_head_detection_simplied.onnx"
+    head_onnx_path = "weights/head_detection_RFB_slim_320x240.onnx"
     facelms_onnx_path = "weights/facelms_112x112.onnx"
     pipeline(video_path, head_onnx_path, facelms_onnx_path)

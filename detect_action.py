@@ -19,7 +19,9 @@ action_list = [
     'drink',
     'eating',
     'leaving',
-    'playing'
+    'playing',
+    'normal',
+    'normal',
 ]
 
 def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=(224, 224)):
@@ -72,12 +74,14 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=(224, 
             processed_frame = _preprocess(frame)
             # extract features and recogntiion using temporal segment network
             rgbdiff = processed_frame - _preprocess(previous_frame)
+            print(tmodel.run(None, {sname: processed_frame})[0].shape)
             squeue.enqueue(smodel.run(None, {sname: processed_frame})[0])
             tqueue.enqueue(tmodel.run(None, {tname: rgbdiff})[0])
 
             # Consensus the K frame as the final results
             predict  = (squeue.get_average() + tqueue.get_average()) / 2
             predict = np.exp(predict)/np.exp(predict).sum()
+            print(predict.shape)
             idx = np.argmax( predict )
             prob = predict[idx]
             semantic_label = action_list[idx]
@@ -91,8 +95,10 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=(224, 
     return inference_res
 
 if __name__ == '__main__':
-    spatial_ort_session  = ort.InferenceSession("weights/test_simplify.onnx")
-    temporal_ort_session = ort.InferenceSession("weights/test_simplify.onnx")
+    #spatial_ort_session  = ort.InferenceSession("weights/test_simplify.onnx")
+    #temporal_ort_session = ort.InferenceSession("weights/test_simplify.onnx")
+    spatial_ort_session  = ort.InferenceSession("data/lege/tsn_mobilenetv2_1x1x8_100e_lege_rgb_8class.onnx")
+    temporal_ort_session = ort.InferenceSession("data/lege/tsn_mobilenetv2_1x1x8_100e_lege_rgbdiff_8class.onnx")
     videos_list = open('data/val.lst').readlines()
     predict_labels, labels = [], []
     prefix = 'data/val_videos'
@@ -102,3 +108,5 @@ if __name__ == '__main__':
         result = detect_action(os.path.join(prefix, video_path), spatial_ort_session, temporal_ort_session)
         idx_list = [v[0] for v in result]
         predict_labels.append(idx_list)
+    
+    pdb.set_trace()
