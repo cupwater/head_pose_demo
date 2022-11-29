@@ -9,6 +9,7 @@ import cv2
 import pdb
 import numpy as np
 import onnxruntime as ort
+import os
 
 from utils.myqueue import MyQueue
 
@@ -80,7 +81,7 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=(224, 
             idx = np.argmax( predict )
             prob = predict[idx]
             semantic_label = action_list[idx]
-            inference_res.append((semantic_label, prob))
+            inference_res.append((idx, semantic_label, prob))
         frame_idx += 1
 
         cv2.imshow('annotated', frame)
@@ -92,6 +93,12 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=(224, 
 if __name__ == '__main__':
     spatial_ort_session  = ort.InferenceSession("weights/test_simplify.onnx")
     temporal_ort_session = ort.InferenceSession("weights/test_simplify.onnx")
-    video_path = "data/test_drink.mp4"
-    results = detect_action(video_path, spatial_ort_session, temporal_ort_session)
-    print(results)
+    videos_list = open('data/val.lst').readlines()
+    predict_labels, labels = [], []
+    prefix = 'data/val_videos'
+    for line in videos_list: 
+        video_path, label = line.strip().split(' ')
+        labels.append(int(label))
+        result = detect_action(os.path.join(prefix, video_path), spatial_ort_session, temporal_ort_session)
+        idx_list = [v[0] for v in result]
+        predict_labels.append(idx_list)
