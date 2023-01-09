@@ -12,7 +12,8 @@ import numpy as np
 import onnxruntime as ort
 
 from detect_head import detect_head
-from detect_head_pose import detect_head_pose, visualize_pose
+from detect_headposev2 import detect_head_pose, visualize_pose
+# from detect_head_pose import detect_head_pose, visualize_pose
 from utils.VirtualDesk import VirtualDesk
 from utils.myqueue import MyQueue
 
@@ -137,6 +138,9 @@ def pipeline(video_path, head_onnx_path, headpose_onnx_path):
             bbox_queue.enqueue(box.reshape(-1))
             headpose = detect_head_pose(ori_image[box[1]:box[3], box[0]:box[2]], 
                                 headpose_ort_session)
+
+            image = ori_image[box[1]:box[3], box[0]:box[2]]
+            image = visualize_pose(image, headpose, size=100)
             print(headpose)
             pose_sign     = is_standard_pose(headpose)
             distance_sign = is_standard_distance(box)
@@ -171,5 +175,6 @@ if __name__ == '__main__':
     video_path = "data/WFJ_video_main2.mp4"
     #head_onnx_path = "weights/lite_head_detection_simplied.onnx"
     head_onnx_path = "weights/head_detection_RFB_slim_320x240.onnx"
-    headpose_onnx_path = "weights/head_pose.onnx"
+    # headpose_onnx_path = "weights/head_pose.onnx"
+    headpose_onnx_path = "weights/headpose_mbnv2.onnx"
     pipeline(video_path, head_onnx_path, headpose_onnx_path)
