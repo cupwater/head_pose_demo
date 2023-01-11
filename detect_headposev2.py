@@ -1,7 +1,7 @@
 '''
 Author: Peng Bo
 Date: 2022-11-13 22:19:55
-LastEditTime: 2022-11-14 10:29:11
+LastEditTime: 2023-01-11 16:06:51
 Description: 
 
 '''
@@ -15,7 +15,6 @@ import pdb
 
 idx_array = [idx for idx in range(66)]
 
-# def visualize_head_pose():
 def visualize_pose(img, headpose, size=100):
     
     def _EulerToMatrix(roll, yaw, pitch):
@@ -72,20 +71,48 @@ def detect_head_pose(src_image, ort_session, input_size=(224, 224)):
     roll_pred  = np.sum(np_softmax(roll)*idx_array, axis=1)*3 - 99
     return [yaw_pred, pitch_pred, roll_pred]
 
+
+def detect_headpose_pt(src_image, model, input_size=(224, 224)):
+    def np_softmax(x):
+        return(np.exp(x)/np.exp(x).sum())
+
+    def _preprocess(src_image):
+        # pre-process the input image 
+        input_data = cv2.cvtColor(src_image, cv2.COLOR_BGR2RGB)
+        input_data = cv2.resize(input_data, input_size)
+        input_data = (input_data/255.0 - np.array([0.485, 0.456, 0.406]))
+        input_data = np.divide(input_data, np.array([0.229, 0.224, 0.225]))
+        target_data = np.expand_dims(np.transpose(input_data, [2, 0, 1]), axis=0)
+        target_data = target_data.astype(np.float32)
+        return target_data
+
+    import torch
+    input_data = torch.from_numpy(_preprocess(src_image))
+
+    yaw, pitch, roll = model(input_data)
+    yaw, pitch, roll = yaw.detach().numpy(), pitch.detach().numpy(), roll.detach().numpy()
+    yaw_pred   = np.sum(np_softmax(yaw)*idx_array, axis=1)*3 - 99
+    pitch_pred = np.sum(np_softmax(pitch)*idx_array, axis=1)*3 - 99
+    roll_pred  = np.sum(np_softmax(roll)*idx_array, axis=1)*3 - 99
+    return [yaw_pred, pitch_pred, roll_pred]
+
+
 if __name__ == '__main__':
-    onnx_path = "weights/headpose_mbnv2.onnx"
+    onnx_path = "weights/mobilenetv2/mobilenetv2.onnx"
     ort_session = ort.InferenceSession(onnx_path)
 
     cap = cv2.VideoCapture(0)
-    
+    import torch
+    from models.mobilenetv2 import mobilenet_v2
+    model = mobilenet_v2(num_classes=66)
+    model.load_state_dict(torch.load('weights/mobilenetv2/mobilenetv2.pt', map_location='cpu'))
     while True:
         ret, image = cap.read()
         if not ret:
             break
-        img_path = "data/heads/2.jpg"
-        image = cv2.imread(img_path)
         headpose = detect_head_pose(image, ort_session)
-        print(headpose)
+        headpose_pt = detect_headpose_pt(image, model)
+        pdb.set_trace()
         image = visualize_pose(image, headpose, size=100)
         cv2.imshow("Result", image)
 
