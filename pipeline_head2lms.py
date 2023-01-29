@@ -10,6 +10,7 @@ Description:
 import cv2
 import numpy as np
 import onnxruntime as ort
+import pdb
 
 from detect_head import detect_head
 from detect_headposev2 import detect_head_pose, visualize_pose
@@ -123,6 +124,19 @@ def pipeline(video_path, head_onnx_path, headpose_onnx_path):
     bbox_queue    = MyQueue(queue_size=30, element_dim=4,  pool_window=2)
     standard_sign_queue = MyQueue(queue_size=15, element_dim=1, pool_window=2)
 
+    def _extract_box_(box):
+        # pre-process the input image using hopenet
+        x_min, y_min, x_max, y_max = box[:]
+        x_min -= int(0.4 * abs(x_max - x_min))
+        y_min -= int(0.4 * abs(y_max - y_min))
+        x_max += int(0.4 * abs(x_max - x_min))
+        y_max += int(0.12 * abs(y_max - y_min))
+        x_min = max(0, x_min)
+        y_min = max(0, y_min)
+        x_max = min(x_max, ori_image.shape[0])
+        y_max = min(y_max, ori_image.shape[1])
+        return x_min, y_min, x_max, y_max 
+
     desk = VirtualDesk()
     # cap = cv2.VideoCapture(video_path)
     cap = cv2.VideoCapture(0)
@@ -136,17 +150,17 @@ def pipeline(video_path, head_onnx_path, headpose_onnx_path):
         box = detect_head(ori_image, head_ort_session)
         if not box is None:
             bbox_queue.enqueue(box.reshape(-1))
-            headpose = detect_head_pose(ori_image[box[1]:box[3], box[0]:box[2]], 
-                                headpose_ort_session)
+            x_min, y_min, x_max, y_max  = _extract_box_(box)            
 
-            image = ori_image[box[1]:box[3], box[0]:box[2]]
-            image = visualize_pose(image, headpose, size=100)
+            head_img = ori_image[y_min:y_max, x_min:x_max]
+            headpose = detect_head_pose(head_img, headpose_ort_session)
             print(headpose)
+
+            image = visualize_pose(head_img, headpose, size=100)
             pose_sign     = is_standard_pose(headpose)
             distance_sign = is_standard_distance(box)
             position_sign = is_standard_position(box)
             standard_sign = pose_sign and distance_sign and position_sign
-
             standard_sign_queue.enqueue(np.array([1 if standard_sign else 0]))
             ori_image = visualize(ori_image, box, pose_sign, distance_sign, 
                             position_sign, standard_sign)
@@ -176,5 +190,5 @@ if __name__ == '__main__':
     #head_onnx_path = "weights/lite_head_detection_simplied.onnx"
     head_onnx_path = "weights/head_detection_RFB_slim_320x240.onnx"
     # headpose_onnx_path = "weights/head_pose.onnx"
-    headpose_onnx_path = "weights/headpose_mbnv2.onnx"
+    headpose_onnx_path = "weights/mobilenetv2.onnx"
     pipeline(video_path, head_onnx_path, headpose_onnx_path)

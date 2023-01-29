@@ -35,7 +35,7 @@ def visualize_pose(img, headpose, size=100):
         matrix = np.matmul(matrix, Rz)
         return matrix
 
-    roll, yaw, pitch = headpose[0], headpose[1], headpose[2]
+    roll, yaw, pitch = headpose[2], headpose[0], headpose[1]
     tdx, tdy = img.shape[1]/2, img.shape[0]/2
     matrix = _EulerToMatrix(-roll, -yaw, -pitch)
 
@@ -69,10 +69,11 @@ def detect_head_pose(src_image, ort_session, input_size=(224, 224)):
     yaw_pred   = np.sum(np_softmax(yaw)*idx_array, axis=1)*3 - 99
     pitch_pred = np.sum(np_softmax(pitch)*idx_array, axis=1)*3 - 99
     roll_pred  = np.sum(np_softmax(roll)*idx_array, axis=1)*3 - 99
-    return [yaw_pred, pitch_pred, roll_pred]
+
+    return [abs(yaw_pred), abs(pitch_pred), abs(roll_pred)]
 
 
-def detect_headpose_pt(src_image, model, input_size=(224, 224)):
+def detect_headpose_pt(src_image, model, ort_session=None, input_size=(224, 224)):
     def np_softmax(x):
         return(np.exp(x)/np.exp(x).sum())
 
@@ -80,8 +81,8 @@ def detect_headpose_pt(src_image, model, input_size=(224, 224)):
         # pre-process the input image 
         input_data = cv2.cvtColor(src_image, cv2.COLOR_BGR2RGB)
         input_data = cv2.resize(input_data, input_size)
-        input_data = (input_data/255.0 - np.array([0.485, 0.456, 0.406]))
-        input_data = np.divide(input_data, np.array([0.229, 0.224, 0.225]))
+        #input_data = (input_data/255.0 - np.array([0.485, 0.456, 0.406]))
+        #input_data = np.divide(input_data, np.array([0.229, 0.224, 0.225]))
         target_data = np.expand_dims(np.transpose(input_data, [2, 0, 1]), axis=0)
         target_data = target_data.astype(np.float32)
         return target_data
@@ -90,22 +91,27 @@ def detect_headpose_pt(src_image, model, input_size=(224, 224)):
     input_data = torch.from_numpy(_preprocess(src_image))
 
     yaw, pitch, roll = model(input_data)
+
     yaw, pitch, roll = yaw.detach().numpy(), pitch.detach().numpy(), roll.detach().numpy()
     yaw_pred   = np.sum(np_softmax(yaw)*idx_array, axis=1)*3 - 99
     pitch_pred = np.sum(np_softmax(pitch)*idx_array, axis=1)*3 - 99
     roll_pred  = np.sum(np_softmax(roll)*idx_array, axis=1)*3 - 99
+
+    if not ort_session is None:
+        onnx_output = ort_session.run(None, {"input": input_data.numpy()})
+        pdb.set_trace()
+
     return [yaw_pred, pitch_pred, roll_pred]
 
-
 if __name__ == '__main__':
-    onnx_path = "weights/mobilenetv2/mobilenetv2.onnx"
+    onnx_path = "weights/mobilenetv2.onnx"
     ort_session = ort.InferenceSession(onnx_path)
 
     cap = cv2.VideoCapture(0)
     import torch
     from models.mobilenetv2 import mobilenet_v2
     model = mobilenet_v2(num_classes=66)
-    model.load_state_dict(torch.load('weights/mobilenetv2/mobilenetv2.pt', map_location='cpu'))
+    model.load_state_dict(torch.load('weights/mobilenetv2.pt', map_location='cpu'))
     while True:
         ret, image = cap.read()
         if not ret:

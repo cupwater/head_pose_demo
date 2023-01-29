@@ -5,14 +5,11 @@ LastEditTime: 2022-11-14 10:29:11
 Description: 
 
 '''
-
 import time
 import cv2
 import numpy as np
 import onnxruntime as ort
-
 import pdb
-
 
 # def visualize_head_pose():
 def visualize_pose(img, headpose, size=100):
@@ -35,7 +32,7 @@ def visualize_pose(img, headpose, size=100):
         matrix = np.matmul(matrix, Rz)
         return matrix
 
-    roll, yaw, pitch = headpose[0], headpose[1], headpose[2]
+    roll, yaw, pitch = headpose[2], headpose[0], headpose[1]
     tdx, tdy = img.shape[1]/2, img.shape[0]/2
     matrix = _EulerToMatrix(-roll, -yaw, -pitch)
 
@@ -46,7 +43,6 @@ def visualize_pose(img, headpose, size=100):
     cv2.line(img, (int(tdx), int(tdy)), (int(-Yaxis[0]+tdx), int(Yaxis[1]+tdy)), (0, 255, 0), 3)
     cv2.line(img, (int(tdx), int(tdy)), (int(Zaxis[0]+tdx), int(-Zaxis[1]+tdy)), (255, 0, 0), 2)
     return img
-
 
 def detect_head_pose(src_image, ort_session, input_size=(224, 224)):    
     input_name = ort_session.get_inputs()[0].name
@@ -72,9 +68,7 @@ def detect_head_pose(src_image, ort_session, input_size=(224, 224)):
 if __name__ == '__main__':
     onnx_path = "weights/head_pose.onnx"
     ort_session = ort.InferenceSession(onnx_path)
-
     cap = cv2.VideoCapture(0)
-    
     while True:
         ret, frame = cap.read()
         if not ret:
