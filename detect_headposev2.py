@@ -1,3 +1,4 @@
+# coding: utf8
 '''
 Author: Peng Bo
 Date: 2022-11-13 22:19:55
@@ -15,6 +16,7 @@ import pdb
 
 idx_array = [idx for idx in range(66)]
 
+# 对姿态进行可视化
 def visualize_pose(img, headpose, size=100):
     
     def _EulerToMatrix(roll, yaw, pitch):
@@ -47,51 +49,35 @@ def visualize_pose(img, headpose, size=100):
     cv2.line(img, (int(tdx), int(tdy)), (int(Zaxis[0]+tdx), int(-Zaxis[1]+tdy)), (255, 0, 0), 2)
     return img
 
+def np_softmax(x):
+    return(np.exp(x)/np.exp(x).sum())
 
+# 对输入图像进行预处理
+def preprocess(src_image, input_size=(224, 224)):
+    input_data = cv2.cvtColor(src_image, cv2.COLOR_BGR2RGB)
+    input_data = cv2.resize(input_data, input_size)
+    input_data = (input_data/255.0 - np.array([0.485, 0.456, 0.406]))
+    input_data = np.divide(input_data, np.array([0.229, 0.224, 0.225]))
+    target_data = np.expand_dims(np.transpose(input_data, [2, 0, 1]), axis=0)
+    target_data = target_data.astype(np.float32)
+    return target_data
+
+# onnx 模型的推理流程
 def detect_head_pose(src_image, ort_session, input_size=(224, 224)):    
     input_name = ort_session.get_inputs()[0].name
-    def _preprocess(src_image):
-        # pre-process the input image 
-        input_data = cv2.cvtColor(src_image, cv2.COLOR_BGR2RGB)
-        input_data = cv2.resize(input_data, input_size)
-        input_data = (input_data/255.0 - np.array([0.485, 0.456, 0.406]))
-        input_data = np.divide(input_data, np.array([0.229, 0.224, 0.225]))
-        target_data = np.expand_dims(np.transpose(input_data, [2, 0, 1]), axis=0)
-        target_data = target_data.astype(np.float32)
-        return target_data
-
-    def np_softmax(x):
-        return(np.exp(x)/np.exp(x).sum())
-
-    input_data = _preprocess(src_image)
+    input_data = preprocess(src_image, input_size)
     yaw, pitch, roll = ort_session.run(None, {input_name: input_data})
-    # print("inference time:{}".format(time.time() - start_time))
     yaw_pred   = np.sum(np_softmax(yaw)*idx_array, axis=1)*3 - 99
     pitch_pred = np.sum(np_softmax(pitch)*idx_array, axis=1)*3 - 99
     roll_pred  = np.sum(np_softmax(roll)*idx_array, axis=1)*3 - 99
-
     return [abs(yaw_pred), abs(pitch_pred), abs(roll_pred)]
 
-
+# pytorch 模型的推理流程
 def detect_headpose_pt(src_image, model, ort_session=None, input_size=(224, 224)):
-    def np_softmax(x):
-        return(np.exp(x)/np.exp(x).sum())
-
-    def _preprocess(src_image):
-        # pre-process the input image 
-        input_data = cv2.cvtColor(src_image, cv2.COLOR_BGR2RGB)
-        input_data = cv2.resize(input_data, input_size)
-        #input_data = (input_data/255.0 - np.array([0.485, 0.456, 0.406]))
-        #input_data = np.divide(input_data, np.array([0.229, 0.224, 0.225]))
-        target_data = np.expand_dims(np.transpose(input_data, [2, 0, 1]), axis=0)
-        target_data = target_data.astype(np.float32)
-        return target_data
 
     import torch
-    input_data = torch.from_numpy(_preprocess(src_image))
-
+    input_data = torch.from_numpy(preprocess(src_image, input_size))
     yaw, pitch, roll = model(input_data)
-
     yaw, pitch, roll = yaw.detach().numpy(), pitch.detach().numpy(), roll.detach().numpy()
     yaw_pred   = np.sum(np_softmax(yaw)*idx_array, axis=1)*3 - 99
     pitch_pred = np.sum(np_softmax(pitch)*idx_array, axis=1)*3 - 99
