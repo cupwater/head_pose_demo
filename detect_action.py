@@ -14,14 +14,14 @@ import os
 from utils.myqueue import MyQueue
 
 action_list = [
+    'node',
     'normal',
-    'chew',
-    'drink',
     'eating',
+    'daze',
     'leaving',
     'playing',
-    'normal',
-    'normal',
+    'bit_finger',
+    'drinking',
 ]
 
 
@@ -69,10 +69,8 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=224):
     squeue = MyQueue(queue_size=frame_len, element_dim=len(action_list))
     # tqueue 是用于保存 tmodel 对每一帧识别结果的队列
     tqueue = MyQueue(queue_size=frame_len, element_dim=len(action_list))
-
     # 用于保存当前视频的动作识别结果
     recognition_res = []
-
     # 由于我们不会识别视频每一帧，而是每个 step 帧识别一次，
     # 所以这里通过 frame_idx % step == 0 用来判断是否进行识别
     frame_idx = 1
@@ -84,11 +82,10 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=224):
         if (frame_idx+1) % step == 0:
             previous_frame = frame
         elif frame_idx % step == 0:
-
             processed_frame = _preprocess(frame)
             # extract features and recogntiion using temporal segment network
             rgbdiff = processed_frame - _preprocess(previous_frame)
-            print(tmodel.run(None, {sname: processed_frame})[0].shape)
+            #print(tmodel.run(None, {sname: processed_frame})[0].shape)
             squeue.enqueue(smodel.run(None, {sname: processed_frame})[0])
             tqueue.enqueue(tmodel.run(None, {tname: rgbdiff})[0])
 
@@ -96,38 +93,32 @@ def detect_action(video, smodel, tmodel, step=4, frame_len=12, input_size=224):
             # 将 smodel 和 tmodel 的识别结果进行简单的融合（平均融合）
             predict = (squeue.get_average() + tqueue.get_average()) / 2
             predict = np.exp(predict)/np.exp(predict).sum()
-            print(predict.shape)
+            #print(predict.shape)
             idx = np.argmax(predict)
             prob = predict[idx]
             semantic_label = action_list[idx]
             # 将最终的识别结果保存到列表中
             recognition_res.append((idx, semantic_label, prob))
         frame_idx += 1
-
-        cv2.imshow('annotated', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
     cap.release()
-
     return recognition_res
 
 
 if __name__ == '__main__':
-    # spatial_ort_session  = ort.InferenceSession("weights/test_simplify.onnx")
-    # temporal_ort_session = ort.InferenceSession("weights/test_simplify.onnx")
     spatial_ort_session = ort.InferenceSession(
-        "data/lege/tsn_mobilenetv2_1x1x8_100e_lege_rgb_8class.onnx")
+        "weights/action_demo/tsn_mobilenetv2_1x1x8_100e_lege8actions_rgb.onnx")
     temporal_ort_session = ort.InferenceSession(
-        "data/lege/tsn_mobilenetv2_1x1x8_100e_lege_rgbdiff_8class.onnx")
-    videos_list = open('data/val.lst').readlines()
+        "weights/action_demo/tsn_mobilenetv2_1x1x8_100e_lege8actions_rgbdiff.onnx")
+    videos_list = open('data/val_list.txt').readlines()
     predict_labels, labels = [], []
-    prefix = 'data/val_videos'
+    prefix = 'data/val_videos/'
     for line in videos_list:
-        video_path, label = line.strip().split(' ')
+        print(f"process {line.strip()}")
+        video_path = line.strip()
+        label = action_list.index(video_path.split('/')[0])
         labels.append(int(label))
         result = detect_action(os.path.join(
             prefix, video_path), spatial_ort_session, temporal_ort_session)
         idx_list = [v[0] for v in result]
-        predict_labels.append(idx_list)
-
+        predict_labels.append(max(idx_list, key=idx_list.count))
     pdb.set_trace()

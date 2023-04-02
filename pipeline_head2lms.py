@@ -177,6 +177,7 @@ def pipeline(video_path, head_onnx_path, headpose_onnx_path):
 
         trigger = 'trigger' if adjust_signal else 'non-trigger'
         cv2.putText(ori_image, trigger, (50, 50), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0,0,255), 2)
+        
         if counter == 0 and adjust_signal:
             adjust_actor(bbox_queue, desk)
 
